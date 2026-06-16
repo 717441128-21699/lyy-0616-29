@@ -7,17 +7,19 @@ export const calculateOverallProgress = (
   allPoliciesAcknowledged = false,
   allDocumentsUploaded = false,
   contractFullySigned = false,
+  evaluationSubmitted = false,
 ): number => {
   const processTasks = tasks.filter((t) => t.processId === process_.id);
   const totalTasks = processTasks.length;
   const completedTasks = processTasks.filter((t) => t.status === 'COMPLETED').length;
 
   const weights = {
-    personalInfo: 15,
-    policies: 10,
+    personalInfo: 12,
+    policies: 8,
     documents: 10,
-    tasks: 40,
-    contract: 25,
+    tasks: 35,
+    contract: 20,
+    evaluation: 15,
   };
 
   let score = 0;
@@ -26,6 +28,7 @@ export const calculateOverallProgress = (
   score += (allDocumentsUploaded ? 1 : 0) * weights.documents;
   score += totalTasks > 0 ? (completedTasks / totalTasks) * weights.tasks : 0;
   score += contractFullySigned ? weights.contract : 0;
+  score += evaluationSubmitted ? weights.evaluation : 0;
 
   return Math.round(score);
 };

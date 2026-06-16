@@ -11,40 +11,72 @@ import type {
   EvaluationResult,
 } from '@/types';
 
-export const formatDate = (dateStr: string | Date, pattern = 'yyyy-MM-dd'): string => {
-  const d = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
-  return format(d, pattern, { locale: zhCN });
+export const formatDate = (dateStr: string | Date | undefined | null, pattern = 'yyyy-MM-dd'): string => {
+  if (!dateStr) return '—';
+  try {
+    const d = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
+    if (isNaN(d.getTime())) return '—';
+    return format(d, pattern, { locale: zhCN });
+  } catch {
+    return '—';
+  }
 };
 
-export const formatDateTime = (dateStr: string | Date): string => {
-  const d = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
-  return format(d, 'yyyy-MM-dd HH:mm', { locale: zhCN });
+export const formatDateTime = (dateStr: string | Date | undefined | null): string => {
+  if (!dateStr) return '—';
+  try {
+    const d = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
+    if (isNaN(d.getTime())) return '—';
+    return format(d, 'yyyy-MM-dd HH:mm', { locale: zhCN });
+  } catch {
+    return '—';
+  }
 };
 
-export const formatRelative = (dateStr: string): string => {
-  const d = parseISO(dateStr);
-  const diff = differenceInDays(d, new Date());
-  if (diff === 0) return '今天';
-  if (diff === 1) return '明天';
-  if (diff === -1) return '昨天';
-  if (diff > 0) return `${diff}天后`;
-  return `${Math.abs(diff)}天前`;
+export const formatRelative = (dateStr: string | undefined | null): string => {
+  if (!dateStr) return '—';
+  try {
+    const d = parseISO(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    const diff = differenceInDays(d, new Date());
+    if (diff === 0) return '今天';
+    if (diff === 1) return '明天';
+    if (diff === -1) return '昨天';
+    if (diff > 0) return `${diff}天后`;
+    return `${Math.abs(diff)}天前`;
+  } catch {
+    return '—';
+  }
 };
 
 export const daysBetween = (from: string, to: string): number => {
-  return differenceInDays(parseISO(to), parseISO(from));
+  try {
+    return differenceInDays(parseISO(to), parseISO(from));
+  } catch {
+    return 0;
+  }
 };
 
 export const probationDaysLeft = (process_: OnboardingProcess): number => {
-  return differenceInDays(parseISO(process_.probationEndDate), new Date());
+  try {
+    return differenceInDays(parseISO(process_.probationEndDate), new Date());
+  } catch {
+    return 0;
+  }
 };
 
 export const isProbationNearEnd = (process_: OnboardingProcess): boolean => {
-  return probationDaysLeft(process_) <= 15 && probationDaysLeft(process_) > 0;
+  const days = probationDaysLeft(process_);
+  return days <= 15 && days > 0;
 };
 
-export const isOverdue = (dueDate: string): boolean => {
-  return isBefore(parseISO(dueDate), new Date());
+export const isOverdue = (dueDate: string | undefined | null): boolean => {
+  if (!dueDate) return false;
+  try {
+    return isBefore(parseISO(dueDate), new Date());
+  } catch {
+    return false;
+  }
 };
 
 export const formatFileSize = (bytes: number): string => {

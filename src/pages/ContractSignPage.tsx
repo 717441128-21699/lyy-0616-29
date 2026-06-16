@@ -267,12 +267,12 @@ export default function ContractSignPage() {
                     <section className="pt-2">
                       <h3 className="font-bold text-neutral-900 mb-2 text-base">第二条 合同期限</h3>
                       <p className="indent-8">
-                        2.1 本合同为固定期限劳动合同，自 <u>{formatDate(process?.startDate || '')}</u> 起，
-                        至 <u>{formatDate(process?.startDate ? '' : '')}</u> 止，共计 <strong>叁年</strong>。
+                        2.1 本合同为固定期限劳动合同，自 <u>{formatDate(process?.startDate)}</u> 起，
+                        至 <u>{process?.startDate ? formatDate(new Date(new Date(process.startDate).getTime() + 365 * 24 * 60 * 60 * 1000 * 3)) : '—'}</u> 止，共计 <strong>叁年</strong>。
                       </p>
                       <p className="indent-8">
-                        2.2 试用期自 <u>{formatDate(process?.startDate || '')}</u> 起，
-                        至 <u>{formatDate(process?.probationEndDate || '')}</u> 止，共计 <strong>叁个月</strong>。
+                        2.2 试用期自 <u>{formatDate(process?.startDate)}</u> 起，
+                        至 <u>{formatDate(process?.probationEndDate)}</u> 止，共计 <strong>叁个月</strong>。
                       </p>
                     </section>
 

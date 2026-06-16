@@ -8,6 +8,8 @@ interface HeaderProps {
   onLogout: () => void;
   notifications?: Notification[];
   unreadCount?: number;
+  onMarkAllRead?: () => void;
+  onNotificationClick?: (notificationId: string) => void;
 }
 
 const roleLabels: Record<string, string> = {
@@ -18,7 +20,14 @@ const roleLabels: Record<string, string> = {
   EMPLOYEE: '新员工',
 };
 
-export function Header({ user, onLogout, notifications = [], unreadCount = 0 }: HeaderProps) {
+export function Header({
+  user,
+  onLogout,
+  notifications = [],
+  unreadCount = 0,
+  onMarkAllRead,
+  onNotificationClick,
+}: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchValue, setSearchValue] = useState('');
@@ -76,9 +85,14 @@ export function Header({ user, onLogout, notifications = [], unreadCount = 0 }: 
             <div className="absolute right-0 top-14 w-96 bg-white rounded-2xl shadow-card-hover border border-neutral-200 overflow-hidden animate-fade-in-up">
               <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
                 <h3 className="font-semibold text-neutral-800">通知中心</h3>
-                <span className="text-xs text-primary-600 font-medium cursor-pointer hover:underline">
-                  全部已读
-                </span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={onMarkAllRead}
+                    className="text-xs text-primary-600 font-medium hover:underline"
+                  >
+                    全部已读
+                  </button>
+                )}
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {notifications.length === 0 ? (
@@ -90,6 +104,7 @@ export function Header({ user, onLogout, notifications = [], unreadCount = 0 }: 
                   notifications.map((notif) => (
                     <div
                       key={notif.id}
+                      onClick={() => onNotificationClick?.(notif.id)}
                       className={cn(
                         'px-5 py-4 border-b border-neutral-50 hover:bg-neutral-50 transition-colors cursor-pointer',
                         !notif.read && 'bg-primary-50/50',

@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useUserStore } from '@/store/useUserStore';
-import type { Notification } from '@/types';
+import { useOnboardingStore } from '@/store/useOnboardingStore';
 
 interface RoleBasedLayoutProps {
   children: ReactNode;
@@ -11,20 +11,27 @@ interface RoleBasedLayoutProps {
 
 export function RoleBasedLayout({ children }: RoleBasedLayoutProps) {
   const { currentUser, logout } = useUserStore();
+  const { getNotificationsForUser, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, checkEvaluationReminders } = useOnboardingStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!currentUser) {
       navigate('/login', { replace: true });
       return;
     }
+    checkEvaluationReminders();
+  }, [currentUser, navigate, checkEvaluationReminders]);
 
-    const unread = notifications.filter((n) => !n.read).length;
-    setUnreadCount(unread);
-  }, [currentUser, navigate, notifications]);
+  const notifications = useMemo(() => {
+    if (!currentUser) return [];
+    return getNotificationsForUser(currentUser.id).slice(0, 10);
+  }, [currentUser, getNotificationsForUser]);
+
+  const unreadCount = useMemo(() => {
+    if (!currentUser) return 0;
+    return getUnreadNotificationCount(currentUser.id);
+  }, [currentUser, getUnreadNotificationCount]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -33,6 +40,16 @@ export function RoleBasedLayout({ children }: RoleBasedLayoutProps) {
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleMarkAllRead = () => {
+    if (currentUser) {
+      markAllNotificationsRead(currentUser.id);
+    }
+  };
+
+  const handleNotificationClick = (notifId: string) => {
+    markNotificationRead(notifId);
   };
 
   if (!currentUser) {
@@ -53,6 +70,8 @@ export function RoleBasedLayout({ children }: RoleBasedLayoutProps) {
           onLogout={handleLogout}
           notifications={notifications}
           unreadCount={unreadCount}
+          onMarkAllRead={handleMarkAllRead}
+          onNotificationClick={handleNotificationClick}
         />
         <main className="flex-1 p-8 overflow-auto animate-fade-in">
           {children}
