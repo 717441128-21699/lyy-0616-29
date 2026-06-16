@@ -77,6 +77,9 @@ export default function EmployeeDetailPage() {
     removeDocument,
     getUserById,
     reviewDocument,
+    confirmEvaluation,
+    setupExtendedProbation,
+    recordTermination,
   } = useOnboardingStore();
 
   const currentUser = useUserStore((s) => s.currentUser);
@@ -85,6 +88,10 @@ export default function EmployeeDetailPage() {
   const [hrSignature, setHrSignature] = useState<string | null>(null);
   const [rejectModalDoc, setRejectModalDoc] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [extendDate, setExtendDate] = useState('');
+  const [improvementPlan, setImprovementPlan] = useState('');
+  const [terminationReason, setTerminationReason] = useState('');
+  const [showFollowUpModal, setShowFollowUpModal] = useState<'confirm' | 'extend' | 'terminate' | null>(null);
 
   const process = useMemo(() => getOnboardingProcessById(processId), [processId, getOnboardingProcessById]);
   const tasks = useMemo(() => getTasksForProcess(processId), [processId, getTasksForProcess]);
@@ -948,7 +955,7 @@ export default function EmployeeDetailPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 mb-6">
                             <span className="text-sm text-neutral-600">评估结果：</span>
                             <span
                               className={cn(
@@ -960,8 +967,221 @@ export default function EmployeeDetailPage() {
                               {getEvaluationConfig(evaluation.suggestedResult).label}
                             </span>
                           </div>
+
+                          {evaluation.followUpStatus && evaluation.followUpStatus !== 'PENDING_REVIEW' && (
+                            <div className="p-4 rounded-xl border mb-6">
+                              <h4 className="text-sm font-semibold text-neutral-700 mb-3 flex items-center gap-1.5">
+                                <FileCheck className="w-4 h-4 text-primary-500" />
+                                后续处理记录
+                              </h4>
+                              {evaluation.followUpStatus === 'CONFIRMED' && evaluation.followUpData && (
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-accent-500" />
+                                    <span className="text-accent-700 font-medium">已确认转正</span>
+                                  </div>
+                                  <p className="text-neutral-500 pl-6">
+                                    确认时间：{formatDateTime(evaluation.followUpData.confirmedAt)}
+                                  </p>
+                                </div>
+                              )}
+                              {evaluation.followUpStatus === 'EXTEND_SET' && evaluation.followUpData && (
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-warning-500" />
+                                    <span className="text-warning-700 font-medium">试用期已延长</span>
+                                  </div>
+                                  <p className="text-neutral-500 pl-6">
+                                    新试用期结束日期：{formatDate(evaluation.followUpData.newProbationEndDate)}
+                                  </p>
+                                  {evaluation.followUpData.improvementPlan && (
+                                    <div className="pl-6 mt-2 p-3 rounded-lg bg-warning-50 border border-warning-100">
+                                      <p className="text-xs text-warning-600 font-medium mb-1">改进计划</p>
+                                      <p className="text-neutral-600 text-sm whitespace-pre-wrap">{evaluation.followUpData.improvementPlan}</p>
+                                    </div>
+                                  )}
+                                  <p className="text-neutral-500 pl-6">
+                                    设置时间：{formatDateTime(evaluation.followUpData.extendSetAt)}
+                                  </p>
+                                </div>
+                              )}
+                              {evaluation.followUpStatus === 'TERMINATION_RECORDED' && evaluation.followUpData && (
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4 text-danger-500" />
+                                    <span className="text-danger-700 font-medium">不通过处理已记录</span>
+                                  </div>
+                                  <p className="text-neutral-500 pl-6">
+                                    处理时间：{formatDateTime(evaluation.followUpData.terminationRecordedAt)}
+                                  </p>
+                                  {evaluation.followUpData.terminationReason && (
+                                    <div className="pl-6 mt-2 p-3 rounded-lg bg-danger-50 border border-danger-100">
+                                      <p className="text-xs text-danger-600 font-medium mb-1">处理原因</p>
+                                      <p className="text-neutral-600 text-sm whitespace-pre-wrap">{evaluation.followUpData.terminationReason}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {evaluation.followUpStatus === 'PENDING_REVIEW' && (
+                            <div className="p-5 rounded-xl border-2 border-dashed border-primary-200 bg-primary-50/30 space-y-4">
+                              <h4 className="text-sm font-semibold text-primary-700 flex items-center gap-2">
+                                <ClipboardCheck className="w-4 h-4" />
+                                后续处理（待HR操作）
+                              </h4>
+                              <p className="text-xs text-neutral-500">
+                                根据评估建议结果，请选择对应的后续处理操作
+                              </p>
+                              <div className="flex flex-wrap gap-3">
+                                {evaluation.suggestedResult === 'PASS' && (
+                                  <button
+                                    onClick={() => setShowFollowUpModal('confirm')}
+                                    className="btn-primary !py-2.5 !px-5"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    确认转正
+                                  </button>
+                                )}
+                                {evaluation.suggestedResult === 'EXTEND' && (
+                                  <button
+                                    onClick={() => setShowFollowUpModal('extend')}
+                                    className="btn-primary !py-2.5 !px-5 !bg-gradient-to-r !from-warning-500 !to-orange-500"
+                                  >
+                                    <Clock className="w-4 h-4" />
+                                    设置延长试用期
+                                  </button>
+                                )}
+                                {evaluation.suggestedResult === 'FAIL' && (
+                                  <button
+                                    onClick={() => setShowFollowUpModal('terminate')}
+                                    className="btn-primary !py-2.5 !px-5 !bg-gradient-to-r !from-danger-500 !to-rose-500"
+                                  >
+                                    <AlertCircle className="w-4 h-4" />
+                                    记录不通过处理
+                                  </button>
+                                )}
+                                {evaluation.suggestedResult !== 'PASS' && (
+                                  <button
+                                    onClick={() => setShowFollowUpModal('confirm')}
+                                    className="btn-secondary !py-2.5 !px-5"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    仍确认转正
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
+
+                      {showFollowUpModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+                          >
+                            <div className="p-6 border-b border-neutral-100">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-neutral-800">
+                                  {showFollowUpModal === 'confirm' && '确认转正'}
+                                  {showFollowUpModal === 'extend' && '设置延长试用期'}
+                                  {showFollowUpModal === 'terminate' && '记录不通过处理'}
+                                </h3>
+                                <button
+                                  onClick={() => setShowFollowUpModal(null)}
+                                  className="p-1 rounded-lg hover:bg-neutral-100 transition-colors"
+                                >
+                                  <X className="w-5 h-5 text-neutral-400" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="p-6 space-y-4">
+                              {showFollowUpModal === 'confirm' && (
+                                <p className="text-sm text-neutral-600">
+                                  确认 <span className="font-semibold">{process?.employeeName}</span> 转正？
+                                  确认后该员工将正式成为公司员工，入职流程将标记为完成。
+                                </p>
+                              )}
+                              {showFollowUpModal === 'extend' && (
+                                <>
+                                  <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1.5">新的试用期结束日期</label>
+                                    <input
+                                      type="date"
+                                      value={extendDate}
+                                      onChange={(e) => setExtendDate(e.target.value)}
+                                      className="input-field"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1.5">改进计划</label>
+                                    <textarea
+                                      value={improvementPlan}
+                                      onChange={(e) => setImprovementPlan(e.target.value)}
+                                      rows={4}
+                                      placeholder="请输入改进计划，包括具体目标、时间节点、支持措施..."
+                                      className="input-field resize-none"
+                                    />
+                                  </div>
+                                </>
+                              )}
+                              {showFollowUpModal === 'terminate' && (
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">处理原因</label>
+                                  <textarea
+                                    value={terminationReason}
+                                    onChange={(e) => setTerminationReason(e.target.value)}
+                                    rows={4}
+                                    placeholder="请输入不通过的处理原因和后续安排..."
+                                    className="input-field resize-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-6 border-t border-neutral-100 flex gap-3 justify-end">
+                              <button
+                                onClick={() => setShowFollowUpModal(null)}
+                                className="btn-secondary !py-2.5 !px-5"
+                              >
+                                取消
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const hrId = currentUser?.id || '';
+                                  if (showFollowUpModal === 'confirm') {
+                                    confirmEvaluation(processId, hrId);
+                                  } else if (showFollowUpModal === 'extend' && extendDate) {
+                                    setupExtendedProbation(processId, { newEndDate: extendDate, improvementPlan, hrUserId: hrId });
+                                    setExtendDate('');
+                                    setImprovementPlan('');
+                                  } else if (showFollowUpModal === 'terminate' && terminationReason) {
+                                    recordTermination(processId, { reason: terminationReason, hrUserId: hrId });
+                                    setTerminationReason('');
+                                  }
+                                  setShowFollowUpModal(null);
+                                }}
+                                disabled={
+                                  (showFollowUpModal === 'extend' && !extendDate) ||
+                                  (showFollowUpModal === 'terminate' && !terminationReason.trim())
+                                }
+                                className={cn(
+                                  'btn-primary !py-2.5 !px-5',
+                                  (showFollowUpModal === 'extend' && !extendDate) ||
+                                  (showFollowUpModal === 'terminate' && !terminationReason.trim())
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : '',
+                                )}
+                              >
+                                确认
+                              </button>
+                            </div>
+                          </motion.div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="card p-12 text-center">

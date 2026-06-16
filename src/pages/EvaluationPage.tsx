@@ -15,13 +15,15 @@ import {
   MessageSquare,
   ArrowRight,
   Sparkles,
+  Clock,
+  FileCheck,
 } from 'lucide-react';
 import { RoleBasedLayout } from '@/components/layout/RoleBasedLayout';
 import EvaluationForm from '@/components/manager/EvaluationForm';
 import { useUserStore } from '@/store/useUserStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { cn } from '@/lib/utils';
-import { formatDate, probationDaysLeft, getEvaluationConfig } from '@/lib/dateUtils';
+import { formatDate, formatDateTime, probationDaysLeft, getEvaluationConfig } from '@/lib/dateUtils';
 import type { OnboardingProcess, ProbationEvaluation } from '@/types';
 
 export default function EvaluationPage() {
@@ -95,14 +97,17 @@ export default function EvaluationPage() {
     <RoleBasedLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
-          <Link to="/manager/evaluations" className="btn-secondary !py-2 !px-3">
+          <Link
+            to={isEmployeeView ? `/employee/${processId}/portal` : '/manager/evaluations'}
+            className="btn-secondary !py-2 !px-3"
+          >
             <ArrowLeft className="w-4 h-4" />
-            返回列表
+            {isEmployeeView ? '返回首页' : '返回列表'}
           </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h1 className="text-xl md:text-2xl font-bold text-neutral-900 truncate">
-                转正评估详情
+                {isEmployeeView ? '我的转正评估' : '转正评估详情'}
               </h1>
               <span
                 className={cn(
@@ -124,7 +129,10 @@ export default function EvaluationPage() {
               </span>
             </div>
             <p className="text-sm text-neutral-500 truncate">
-              对 <span className="font-medium text-neutral-700">{process.employeeName}</span> 的试用期表现进行综合评估
+              {isEmployeeView
+                ? '您的试用期评估结果与后续处理进度'
+                : <>对 <span className="font-medium text-neutral-700">{process.employeeName}</span> 的试用期表现进行综合评估</>
+              }
             </p>
           </div>
         </div>
@@ -329,19 +337,21 @@ export default function EvaluationPage() {
                   </div>
                   <div className="flex gap-3 w-full md:w-auto">
                     <Link
-                      to="/manager/evaluations"
+                      to={isEmployeeView ? `/employee/${processId}/portal` : '/manager/evaluations'}
                       className="btn-secondary !py-2.5 !px-5 flex-1 md:flex-none justify-center"
                     >
                       <ArrowLeft className="w-4 h-4" />
-                      返回列表
+                      {isEmployeeView ? '返回首页' : '返回列表'}
                     </Link>
-                    <Link
-                      to="/hr/dashboard"
-                      className="btn-primary !py-2.5 !px-5 flex-1 md:flex-none justify-center"
-                    >
-                      查看全部进度
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
+                    {!isEmployeeView && (
+                      <Link
+                        to="/hr/dashboard"
+                        className="btn-primary !py-2.5 !px-5 flex-1 md:flex-none justify-center"
+                      >
+                        查看全部进度
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -421,6 +431,104 @@ export default function EvaluationPage() {
                   </p>
                 </div>
               </motion.div>
+
+              {evaluation.followUpStatus && (
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.25 }}
+                  className="card p-5 md:p-7"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                      <FileCheck className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base md:text-lg font-bold text-neutral-800">后续处理进度</h3>
+                      <p className="text-xs text-neutral-500">当前流转状态</p>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute left-5 top-8 bottom-8 w-0.5 bg-neutral-200" />
+                    <div className="space-y-6">
+                      <div className="relative flex items-start gap-4">
+                        <div className={cn(
+                          'w-10 h-10 rounded-full flex items-center justify-center z-10 flex-shrink-0',
+                          'bg-accent-100 text-accent-600',
+                        )}>
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                        <div className="pt-1.5">
+                          <p className="text-sm font-semibold text-neutral-800">经理评估已提交</p>
+                          <p className="text-xs text-neutral-500 mt-0.5">
+                            建议结果：{resultConfig?.label} · {formatDate(evaluation.submittedAt)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="relative flex items-start gap-4">
+                        <div className={cn(
+                          'w-10 h-10 rounded-full flex items-center justify-center z-10 flex-shrink-0',
+                          evaluation.followUpStatus === 'PENDING_REVIEW'
+                            ? 'bg-primary-100 text-primary-600 animate-pulse'
+                            : 'bg-accent-100 text-accent-600',
+                        )}>
+                          {evaluation.followUpStatus === 'PENDING_REVIEW'
+                            ? <Clock className="w-5 h-5" />
+                            : <CheckCircle2 className="w-5 h-5" />
+                          }
+                        </div>
+                        <div className="pt-1.5">
+                          <p className="text-sm font-semibold text-neutral-800">HR 后续处理</p>
+                          {evaluation.followUpStatus === 'PENDING_REVIEW' && (
+                            <p className="text-xs text-primary-600 mt-0.5 font-medium">等待HR处理中...</p>
+                          )}
+                          {evaluation.followUpStatus === 'CONFIRMED' && evaluation.followUpData && (
+                            <>
+                              <p className="text-xs text-accent-600 mt-0.5 font-medium">已确认转正 ✓</p>
+                              <p className="text-xs text-neutral-400 mt-0.5">确认时间：{formatDateTime(evaluation.followUpData.confirmedAt)}</p>
+                            </>
+                          )}
+                          {evaluation.followUpStatus === 'EXTEND_SET' && evaluation.followUpData && (
+                            <>
+                              <p className="text-xs text-warning-600 mt-0.5 font-medium">试用期已延长</p>
+                              <p className="text-xs text-neutral-500 mt-0.5">新结束日期：{formatDate(evaluation.followUpData.newProbationEndDate)}</p>
+                              {evaluation.followUpData.improvementPlan && (
+                                <div className="mt-2 p-3 rounded-lg bg-warning-50 border border-warning-100">
+                                  <p className="text-xs text-warning-600 font-medium mb-1">改进计划</p>
+                                  <p className="text-neutral-600 text-xs whitespace-pre-wrap">{evaluation.followUpData.improvementPlan}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {evaluation.followUpStatus === 'TERMINATION_RECORDED' && evaluation.followUpData && (
+                            <>
+                              <p className="text-xs text-danger-600 mt-0.5 font-medium">不通过处理已记录</p>
+                              {evaluation.followUpData.terminationReason && (
+                                <div className="mt-2 p-3 rounded-lg bg-danger-50 border border-danger-100">
+                                  <p className="text-xs text-danger-600 font-medium mb-1">处理原因</p>
+                                  <p className="text-neutral-600 text-xs whitespace-pre-wrap">{evaluation.followUpData.terminationReason}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="flex gap-3">
+                <Link
+                  to={isEmployeeView ? `/employee/${processId}/portal` : '/manager/evaluations'}
+                  className="btn-secondary !py-2.5 !px-5 flex-1 md:flex-none justify-center"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  {isEmployeeView ? '返回首页' : '返回列表'}
+                </Link>
+              </div>
             </motion.div>
           ) : isEmployeeView ? (
             <motion.div

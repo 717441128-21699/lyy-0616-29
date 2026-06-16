@@ -134,6 +134,12 @@ export interface EmploymentContract {
 
 export type EvaluationResult = 'PASS' | 'EXTEND' | 'FAIL';
 
+export type EvaluationFollowUpStatus =
+  | 'PENDING_REVIEW'
+  | 'CONFIRMED'
+  | 'EXTEND_SET'
+  | 'TERMINATION_RECORDED';
+
 export interface ProbationEvaluation {
   id: string;
   processId: string;
@@ -145,6 +151,20 @@ export interface ProbationEvaluation {
   overallComment: string;
   suggestedResult: EvaluationResult;
   submittedAt: string;
+  followUpStatus?: EvaluationFollowUpStatus;
+  followUpData?: EvaluationFollowUpData;
+}
+
+export interface EvaluationFollowUpData {
+  confirmedAt?: string;
+  confirmedBy?: string;
+  newProbationEndDate?: string;
+  improvementPlan?: string;
+  extendSetAt?: string;
+  extendSetBy?: string;
+  terminationReason?: string;
+  terminationRecordedAt?: string;
+  terminationRecordedBy?: string;
 }
 
 export type NotificationType =

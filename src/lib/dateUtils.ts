@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { format, differenceInDays, addDays, parseISO, isBefore } from 'date-fns';
 import { zhCN } from 'date-fns/locale/zh-CN';
+import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 import type {
   OnboardingProcess,
   OnboardingTask,
@@ -130,11 +131,11 @@ export const getDocumentTypeConfig = (type: DocumentType): { label: string; clas
   return map[type];
 };
 
-export const getEvaluationConfig = (result: EvaluationResult): { label: string; className: string } => {
-  const map: Record<EvaluationResult, { label: string; className: string }> = {
-    PASS: { label: '建议通过', className: 'bg-accent-100 text-accent-800' },
-    EXTEND: { label: '延长试用期', className: 'bg-warning-100 text-warning-800' },
-    FAIL: { label: '不予通过', className: 'bg-danger-100 text-danger-800' },
+export const getEvaluationConfig = (result: EvaluationResult): { label: string; className: string; icon: typeof CheckCircle2 } => {
+  const map: Record<EvaluationResult, { label: string; className: string; icon: typeof CheckCircle2 }> = {
+    PASS: { label: '建议通过', className: 'bg-accent-100 text-accent-800', icon: CheckCircle2 },
+    EXTEND: { label: '延长试用期', className: 'bg-warning-100 text-warning-800', icon: Clock },
+    FAIL: { label: '不予通过', className: 'bg-danger-100 text-danger-800', icon: XCircle },
   };
   return map[result];
 };

@@ -12,6 +12,7 @@ import type {
   DocumentReviewStatus,
   EmploymentContract,
   ProbationEvaluation,
+  EvaluationFollowUpData,
   TaskCategory,
   User,
   Notification,
@@ -96,6 +97,9 @@ interface OnboardingState {
   hrSignContract: (processId: string, signatureData: string) => void;
 
   submitEvaluation: (data: Omit<ProbationEvaluation, 'id' | 'submittedAt'>) => void;
+  confirmEvaluation: (processId: string, hrUserId: string) => void;
+  setupExtendedProbation: (processId: string, data: { newEndDate: string; improvementPlan: string; hrUserId: string }) => void;
+  recordTermination: (processId: string, data: { reason: string; hrUserId: string }) => void;
 
   addNotification: (notification: Omit<Notification, 'id' | 'createdAt' | 'read'>) => void;
   markNotificationRead: (notificationId: string) => void;
@@ -563,10 +567,13 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       submitEvaluation: (data) => {
         const id = `eval-${String(Date.now()).slice(-6)}`;
+        const followUpStatus = data.suggestedResult === 'PASS' ? 'PENDING_REVIEW' as const
+          : data.suggestedResult === 'EXTEND' ? 'PENDING_REVIEW' as const
+          : 'PENDING_REVIEW' as const;
         set((state) => ({
           evaluations: [
             ...state.evaluations,
-            { ...data, id, submittedAt: iso(new Date()) },
+            { ...data, id, submittedAt: iso(new Date()), followUpStatus },
           ],
         }));
         const proc = get().getOnboardingProcessById(data.processId);
@@ -575,7 +582,7 @@ export const useOnboardingStore = create<OnboardingState>()(
             userId: proc.createdBy,
             type: 'EVALUATION_SUBMITTED',
             title: '转正评估已提交',
-            message: `${proc.employeeName} 的转正评估已提交，建议结果：${data.suggestedResult === 'PASS' ? '通过' : data.suggestedResult === 'EXTEND' ? '延长试用期' : '不予通过'}。`,
+            message: `${proc.employeeName} 的转正评估已提交，建议结果：${data.suggestedResult === 'PASS' ? '通过' : data.suggestedResult === 'EXTEND' ? '延长试用期' : '不予通过'}。请及时处理。`,
             relatedProcessId: data.processId,
           });
           get().addNotification({
@@ -587,6 +594,110 @@ export const useOnboardingStore = create<OnboardingState>()(
           });
         }
         setTimeout(() => get().recalculateProgress(data.processId), 100);
+      },
+
+      confirmEvaluation: (processId, hrUserId) => {
+        set((state) => ({
+          evaluations: state.evaluations.map((e) =>
+            e.processId === processId
+              ? {
+                  ...e,
+                  followUpStatus: 'CONFIRMED',
+                  followUpData: {
+                    ...e.followUpData,
+                    confirmedAt: iso(new Date()),
+                    confirmedBy: hrUserId,
+                  },
+                }
+              : e,
+          ),
+        }));
+        const proc = get().getOnboardingProcessById(processId);
+        if (proc) {
+          get().addNotification({
+            userId: proc.employeeId,
+            type: 'EVALUATION_SUBMITTED',
+            title: '转正已确认',
+            message: '恭喜！HR已确认您的转正评估，您已正式成为公司员工。',
+            relatedProcessId: processId,
+          });
+          set((s) => ({
+            processes: s.processes.map((p) =>
+              p.id === processId ? { ...p, status: 'COMPLETED' as OnboardingStatus } : p,
+            ),
+          }));
+        }
+      },
+
+      setupExtendedProbation: (processId, data) => {
+        set((state) => ({
+          evaluations: state.evaluations.map((e) =>
+            e.processId === processId
+              ? {
+                  ...e,
+                  followUpStatus: 'EXTEND_SET',
+                  followUpData: {
+                    ...e.followUpData,
+                    newProbationEndDate: data.newEndDate,
+                    improvementPlan: data.improvementPlan,
+                    extendSetAt: iso(new Date()),
+                    extendSetBy: data.hrUserId,
+                  },
+                }
+              : e,
+          ),
+          processes: state.processes.map((p) =>
+            p.id === processId
+              ? { ...p, probationEndDate: data.newEndDate, status: 'PROBATION' as OnboardingStatus }
+              : p,
+          ),
+        }));
+        const proc = get().getOnboardingProcessById(processId);
+        if (proc) {
+          get().addNotification({
+            userId: proc.employeeId,
+            type: 'EVALUATION_SUBMITTED',
+            title: '试用期已延长',
+            message: `您的试用期已延长至 ${data.newEndDate}，请按照改进计划提升表现。`,
+            relatedProcessId: processId,
+          });
+          get().addNotification({
+            userId: proc.managerId,
+            type: 'EVALUATION_SUBMITTED',
+            title: '试用期延长已设置',
+            message: `${proc.employeeName} 的试用期已延长至 ${data.newEndDate}，改进计划已生效。`,
+            relatedProcessId: processId,
+          });
+        }
+      },
+
+      recordTermination: (processId, data) => {
+        set((state) => ({
+          evaluations: state.evaluations.map((e) =>
+            e.processId === processId
+              ? {
+                  ...e,
+                  followUpStatus: 'TERMINATION_RECORDED',
+                  followUpData: {
+                    ...e.followUpData,
+                    terminationReason: data.reason,
+                    terminationRecordedAt: iso(new Date()),
+                    terminationRecordedBy: data.hrUserId,
+                  },
+                }
+              : e,
+          ),
+        }));
+        const proc = get().getOnboardingProcessById(processId);
+        if (proc) {
+          get().addNotification({
+            userId: proc.employeeId,
+            type: 'EVALUATION_SUBMITTED',
+            title: '评估结果通知',
+            message: '您的试用期评估结果为不通过，详情请联系HR了解。',
+            relatedProcessId: processId,
+          });
+        }
       },
 
       addNotification: (notification) => {

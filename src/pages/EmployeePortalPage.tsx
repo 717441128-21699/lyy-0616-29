@@ -19,6 +19,7 @@ import {
   FileText,
   Sparkles,
   ClipboardCheck,
+  XCircle,
 } from 'lucide-react';
 import { WelcomeBanner } from '@/components/employee/WelcomeBanner';
 import { ProgressTimeline } from '@/components/employee/ProgressTimeline';
@@ -75,11 +76,18 @@ export default function EmployeePortalPage() {
   }, [acks]);
 
   const documentStatus = useMemo(() => {
-    const requiredTypes = ['ID_CARD_FRONT', 'ID_CARD_BACK', 'DIPLOMA', 'PHOTO'];
-    const count = requiredTypes.filter((type) => docs.some((d) => d.type === type)).length;
-    if (count >= 4) return { status: 'done', label: '已完成', color: 'text-accent-600', bg: 'bg-accent-50 border-accent-200' };
-    if (count > 0) return { status: 'progress', label: `${count}/4`, color: 'text-warning-600', bg: 'bg-warning-50 border-warning-200' };
-    return { status: 'pending', label: '未开始', color: 'text-neutral-500', bg: 'bg-neutral-50 border-neutral-200' };
+    const requiredTypes: Array<'ID_CARD_FRONT' | 'ID_CARD_BACK' | 'DIPLOMA' | 'PHOTO'> = ['ID_CARD_FRONT', 'ID_CARD_BACK', 'DIPLOMA', 'PHOTO'];
+    const approvedCount = requiredTypes.filter((type) =>
+      docs.some((d) => d.type === type && d.reviewStatus === 'APPROVED'),
+    ).length;
+    const rejectedCount = docs.filter((d) => d.reviewStatus === 'REJECTED').length;
+    const pendingCount = requiredTypes.filter((type) =>
+      docs.some((d) => d.type === type && d.reviewStatus === 'PENDING'),
+    ).length;
+    if (approvedCount >= 4) return { status: 'done', label: '已通过', color: 'text-accent-600', bg: 'bg-accent-50 border-accent-200' };
+    if (rejectedCount > 0) return { status: 'rejected', label: `${rejectedCount}项驳回`, color: 'text-danger-600', bg: 'bg-danger-50 border-danger-200' };
+    if (pendingCount > 0 || approvedCount > 0) return { status: 'progress', label: `审核中 ${approvedCount}/4`, color: 'text-warning-600', bg: 'bg-warning-50 border-warning-200' };
+    return { status: 'pending', label: '未上传', color: 'text-neutral-500', bg: 'bg-neutral-50 border-neutral-200' };
   }, [docs]);
 
   const contractStatus = useMemo(() => {
@@ -132,13 +140,23 @@ export default function EmployeePortalPage() {
     },
     {
       key: 'documents',
-      icon: Upload,
+      icon: documentStatus.status === 'rejected' ? XCircle : Upload,
       title: '材料上传',
-      desc: '上传身份证、学历证书、证件照等',
+      desc: documentStatus.status === 'rejected'
+        ? '部分材料被驳回，请重新提交'
+        : documentStatus.status === 'done'
+          ? '所有材料审核已通过'
+          : '上传身份证、学历证书、证件照等',
       status: documentStatus,
       path: `/employee/${processId}/documents`,
-      gradient: 'from-warning-500 to-orange-500',
-      iconBg: 'bg-warning-100 text-warning-600',
+      gradient: documentStatus.status === 'rejected'
+        ? 'from-danger-500 to-rose-500'
+        : 'from-warning-500 to-orange-500',
+      iconBg: documentStatus.status === 'rejected'
+        ? 'bg-danger-100 text-danger-600'
+        : documentStatus.status === 'done'
+          ? 'bg-accent-100 text-accent-600'
+          : 'bg-warning-100 text-warning-600',
     },
     {
       key: 'contract',
@@ -219,6 +237,7 @@ export default function EmployeePortalPage() {
 
   const StatusIcon = ({ status }: { status: string }) => {
     if (status === 'done') return <CheckCircle2 className="w-4 h-4" />;
+    if (status === 'rejected') return <XCircle className="w-4 h-4" />;
     if (status === 'progress') return <Clock className="w-4 h-4 animate-pulse" />;
     return <AlertCircle className="w-4 h-4" />;
   };
