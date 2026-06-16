@@ -1,0 +1,138 @@
+/** @type {import('tailwindcss').Config} */
+
+export default {
+  darkMode: "class",
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    container: {
+      center: true,
+      screens: {
+        sm: '640px',
+        md: '768px',
+        lg: '1024px',
+        xl: '1280px',
+        '2xl': '1440px',
+      },
+    },
+    extend: {
+      colors: {
+        primary: {
+          50: '#F0F6FC',
+          100: '#DCE8F5',
+          200: '#B9D1EB',
+          300: '#8CB5DC',
+          400: '#5A92CB',
+          500: '#0F4C81',
+          600: '#0E4575',
+          700: '#0B3A62',
+          800: '#092E4E',
+          900: '#062038',
+          950: '#041627',
+        },
+        accent: {
+          50: '#F0FDF9',
+          100: '#CCFBEF',
+          200: '#99F6DF',
+          300: '#5EEAD4',
+          400: '#2DD4A8',
+          500: '#10B981',
+          600: '#059669',
+          700: '#047857',
+          800: '#065F46',
+          900: '#064E3B',
+        },
+        warning: {
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          300: '#FCD34D',
+          400: '#FBBF24',
+          500: '#F59E0B',
+          600: '#D97706',
+          700: '#B45309',
+          800: '#92400E',
+          900: '#78350F',
+        },
+        danger: {
+          50: '#FEF2F2',
+          100: '#FEE2E2',
+          200: '#FECACA',
+          300: '#FCA5A5',
+          400: '#F87171',
+          500: '#EF4444',
+          600: '#DC2626',
+          700: '#B91C1C',
+          800: '#991B1B',
+          900: '#7F1D1D',
+        },
+        neutral: {
+          50: '#FAFAF9',
+          100: '#F5F5F4',
+          200: '#E7E5E4',
+          300: '#D6D3D1',
+          400: '#A8A29E',
+          500: '#78716C',
+          600: '#57534E',
+          700: '#44403C',
+          800: '#292524',
+          900: '#1C1917',
+        },
+      },
+      fontFamily: {
+        sans: ['HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'system-ui', 'sans-serif'],
+        serif: ['Source Han Serif SC', 'Noto Serif SC', 'Georgia', 'serif'],
+      },
+      boxShadow: {
+        'card': '0 2px 8px -2px rgba(15, 76, 129, 0.08), 0 1px 3px -1px rgba(15, 76, 129, 0.06)',
+        'card-hover': '0 12px 24px -8px rgba(15, 76, 129, 0.15), 0 4px 8px -4px rgba(15, 76, 129, 0.1)',
+        'glow-primary': '0 0 20px rgba(15, 76, 129, 0.25)',
+        'glow-accent': '0 0 20px rgba(45, 212, 168, 0.35)',
+      },
+      backgroundImage: {
+        'gradient-primary': 'linear-gradient(135deg, #0F4C81 0%, #1E6FA8 50%, #2DD4A8 100%)',
+        'gradient-accent': 'linear-gradient(135deg, #2DD4A8 0%, #10B981 100%)',
+        'gradient-hero': 'radial-gradient(ellipse at top left, rgba(15, 76, 129, 0.12) 0%, transparent 50%), radial-gradient(ellipse at bottom right, rgba(45, 212, 168, 0.10) 0%, transparent 50%)',
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp 0.6s ease-out forwards',
+        'fade-in': 'fadeIn 0.4s ease-out forwards',
+        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+        'checkmark': 'checkmark 0.5s cubic-bezier(0.65, 0, 0.45, 1) forwards',
+        'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+        'progress-fill': 'progressFill 1.2s ease-out forwards',
+      },
+      keyframes: {
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        pulseSoft: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.7' },
+        },
+        checkmark: {
+          '0%': { transform: 'scale(0) rotate(-45deg)', opacity: '0' },
+          '50%': { transform: 'scale(1.2) rotate(0deg)', opacity: '1' },
+          '100%': { transform: 'scale(1) rotate(0deg)', opacity: '1' },
+        },
+        glowPulse: {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(45, 212, 168, 0.4)' },
+          '50%': { boxShadow: '0 0 0 10px rgba(45, 212, 168, 0)' },
+        },
+        progressFill: {
+          '0%': { width: '0%' },
+          '100%': { width: 'var(--target-width)' },
+        },
+      },
+      borderRadius: {
+        'xl': '12px',
+        '2xl': '16px',
+      },
+    },
+  },
+  plugins: [],
+};
