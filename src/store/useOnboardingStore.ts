@@ -296,8 +296,12 @@ export const useOnboardingStore = create<OnboardingState>()(
         );
 
         let newStatus = process_.status;
+        let probationDays = 0;
+        try { probationDays = differenceInDays(parseISO(process_.probationEndDate), new Date()); } catch {}
+        const isNearProbationEnd = probationDays <= 15 && probationDays > 0;
+
         if (progress >= 100) newStatus = 'COMPLETED';
-        else if (progress >= 85 && contractSigned && !evaluationSubmitted) newStatus = 'EVALUATION_PENDING';
+        else if (progress >= 85 && contractSigned && !evaluationSubmitted && isNearProbationEnd) newStatus = 'EVALUATION_PENDING';
         else if (progress >= 70 && contractSigned) newStatus = 'PROBATION';
         else if (progress >= 45 && contract) newStatus = 'CONTRACT_PENDING';
         else if (progress >= 20) newStatus = 'INFO_COLLECTING';
@@ -397,12 +401,23 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       uploadDocument: (processId, doc) => {
         const id = `doc-${String(Date.now()).slice(-6)}`;
-        set((state) => ({
-          documents: [
-            ...state.documents,
-            { ...doc, id, processId, uploadDate: iso(new Date()), reviewStatus: 'PENDING' },
-          ],
-        }));
+        const state = get();
+        const existingForType = state.documents.filter((d) => d.processId === processId && d.type === doc.type);
+        if (existingForType.length > 0) {
+          set((s) => ({
+            documents: [
+              ...s.documents.filter((d) => !(d.processId === processId && d.type === doc.type)),
+              { ...doc, id, processId, uploadDate: iso(new Date()), reviewStatus: 'PENDING' },
+            ],
+          }));
+        } else {
+          set((state) => ({
+            documents: [
+              ...state.documents,
+              { ...doc, id, processId, uploadDate: iso(new Date()), reviewStatus: 'PENDING' },
+            ],
+          }));
+        }
         setTimeout(() => get().recalculateProgress(processId), 100);
       },
 

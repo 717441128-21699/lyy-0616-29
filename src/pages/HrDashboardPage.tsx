@@ -50,13 +50,21 @@ const STATUS_OPTIONS: Array<{ value: OnboardingStatus | 'ALL'; label: string }> 
 ];
 
 type DashboardTab = 'overview' | 'evaluations';
-type EvaluationFilter = 'ALL' | 'PASS' | 'EXTEND' | 'FAIL';
+type EvalSubTab = 'pending' | 'archived';
+type PendingEvalCategory = 'all' | 'confirm' | 'extend' | 'terminate';
 
-const EVAL_FILTER_OPTIONS: Array<{ value: EvaluationFilter; label: string; icon: typeof CheckCircle2; color: string }> = [
-  { value: 'ALL', label: '全部', icon: ClipboardCheck, color: 'text-neutral-600' },
-  { value: 'PASS', label: '通过', icon: CheckCircle2, color: 'text-accent-600' },
-  { value: 'EXTEND', label: '延长试用', icon: Clock, color: 'text-warning-600' },
-  { value: 'FAIL', label: '不通过', icon: XCircle, color: 'text-danger-600' },
+const EVAL_ARCHIVE_OPTIONS: Array<{ value: 'ALL' | 'PASS' | 'EXTEND' | 'FAIL'; label: string; icon: typeof CheckCircle2; color: string }> = [
+  { value: 'ALL', label: '全部归档', icon: ClipboardCheck, color: 'text-neutral-600' },
+  { value: 'PASS', label: '已转正', icon: CheckCircle2, color: 'text-accent-600' },
+  { value: 'EXTEND', label: '延期设置', icon: Clock, color: 'text-warning-600' },
+  { value: 'FAIL', label: '不通过记录', icon: XCircle, color: 'text-danger-600' },
+];
+
+const PENDING_CATEGORY_OPTIONS: Array<{ value: PendingEvalCategory; label: string; icon: typeof CheckCircle2; color: string; matchResult?: 'PASS' | 'EXTEND' | 'FAIL' }> = [
+  { value: 'all', label: '全部待处理', icon: ClipboardCheck, color: 'text-neutral-600' },
+  { value: 'confirm', label: '待确认转正', icon: CheckCircle2, color: 'text-accent-600', matchResult: 'PASS' },
+  { value: 'extend', label: '待设置延期', icon: Clock, color: 'text-warning-600', matchResult: 'EXTEND' },
+  { value: 'terminate', label: '待记录不通过', icon: XCircle, color: 'text-danger-600', matchResult: 'FAIL' },
 ];
 
 export default function HrDashboardPage() {
@@ -64,7 +72,9 @@ export default function HrDashboardPage() {
   const { processes, getProcessesByStatus, evaluations, getEvaluationForProcess, getOnboardingProcessById } = useOnboardingStore();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [evalFilter, setEvalFilter] = useState<EvaluationFilter>('ALL');
+  const [evalSubTab, setEvalSubTab] = useState<EvalSubTab>('pending');
+  const [pendingCategory, setPendingCategory] = useState<PendingEvalCategory>('all');
+  const [archiveFilter, setArchiveFilter] = useState<'ALL' | 'PASS' | 'EXTEND' | 'FAIL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OnboardingStatus | 'ALL'>('ALL');
   const [deptFilter, setDeptFilter] = useState<string>('ALL');
@@ -99,18 +109,26 @@ export default function HrDashboardPage() {
     }).length;
   }, [processes]);
 
-  const evaluationResults = useMemo(() => {
-    let result = processes
+  const allEvaluations = useMemo(() => {
+    return processes
       .map((p) => {
         const eval_ = getEvaluationForProcess(p.id);
         return { process: p, evaluation: eval_ };
       })
-      .filter((item) => !!item.evaluation);
+      .filter((item) => !!item.evaluation)
+      .sort((a, b) =>
+        new Date(b.evaluation!.submittedAt).getTime() - new Date(a.evaluation!.submittedAt).getTime(),
+      );
+  }, [processes, evaluations, getEvaluationForProcess]);
 
-    if (evalFilter !== 'ALL') {
-      result = result.filter((item) => item.evaluation?.suggestedResult === evalFilter);
+  const pendingEvaluations = useMemo(() => {
+    let result = allEvaluations.filter(
+      (item) => !item.evaluation?.followUpStatus || item.evaluation.followUpStatus === 'PENDING_REVIEW',
+    );
+    if (pendingCategory !== 'all') {
+      const match = PENDING_CATEGORY_OPTIONS.find((c) => c.value === pendingCategory)?.matchResult;
+      if (match) result = result.filter((item) => item.evaluation?.suggestedResult === match);
     }
-
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((item) =>
@@ -119,18 +137,56 @@ export default function HrDashboardPage() {
         item.process.position.toLowerCase().includes(q),
       );
     }
+    return result;
+  }, [allEvaluations, pendingCategory, searchQuery]);
 
-    return result.sort((a, b) =>
-      new Date(b.evaluation!.submittedAt).getTime() - new Date(a.evaluation!.submittedAt).getTime(),
+  const archivedEvaluations = useMemo(() => {
+    let result = allEvaluations.filter(
+      (item) =>
+        item.evaluation?.followUpStatus &&
+        item.evaluation.followUpStatus !== 'PENDING_REVIEW',
     );
-  }, [processes, evaluations, evalFilter, searchQuery, getEvaluationForProcess]);
+    if (archiveFilter !== 'ALL') {
+      result = result.filter(
+        (item) =>
+          (archiveFilter === 'PASS' && item.evaluation?.followUpStatus === 'CONFIRMED') ||
+          (archiveFilter === 'EXTEND' && item.evaluation?.followUpStatus === 'EXTEND_SET') ||
+          (archiveFilter === 'FAIL' && item.evaluation?.followUpStatus === 'TERMINATION_RECORDED'),
+      );
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((item) =>
+        item.process.employeeName.toLowerCase().includes(q) ||
+        item.process.department.toLowerCase().includes(q) ||
+        item.process.position.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [allEvaluations, archiveFilter, searchQuery]);
 
-  const evaluationCounts = useMemo(() => ({
-    all: processes.filter((p) => !!getEvaluationForProcess(p.id)).length,
-    pass: processes.filter((p) => getEvaluationForProcess(p.id)?.suggestedResult === 'PASS').length,
-    extend: processes.filter((p) => getEvaluationForProcess(p.id)?.suggestedResult === 'EXTEND').length,
-    fail: processes.filter((p) => getEvaluationForProcess(p.id)?.suggestedResult === 'FAIL').length,
-  }), [processes, evaluations, getEvaluationForProcess]);
+  const pendingCounts = useMemo(() => ({
+    all: pendingEvaluations.length,
+    confirm: allEvaluations.filter((item) =>
+      (!item.evaluation?.followUpStatus || item.evaluation.followUpStatus === 'PENDING_REVIEW') &&
+      item.evaluation?.suggestedResult === 'PASS',
+    ).length,
+    extend: allEvaluations.filter((item) =>
+      (!item.evaluation?.followUpStatus || item.evaluation.followUpStatus === 'PENDING_REVIEW') &&
+      item.evaluation?.suggestedResult === 'EXTEND',
+    ).length,
+    terminate: allEvaluations.filter((item) =>
+      (!item.evaluation?.followUpStatus || item.evaluation.followUpStatus === 'PENDING_REVIEW') &&
+      item.evaluation?.suggestedResult === 'FAIL',
+    ).length,
+  }), [pendingEvaluations, allEvaluations]);
+
+  const archiveCounts = useMemo(() => ({
+    all: archivedEvaluations.length,
+    pass: allEvaluations.filter((item) => item.evaluation?.followUpStatus === 'CONFIRMED').length,
+    extend: allEvaluations.filter((item) => item.evaluation?.followUpStatus === 'EXTEND_SET').length,
+    fail: allEvaluations.filter((item) => item.evaluation?.followUpStatus === 'TERMINATION_RECORDED').length,
+  }), [archivedEvaluations, allEvaluations]);
 
   const filteredProcesses = useMemo(() => {
     let result = [...processes];
@@ -430,125 +486,297 @@ export default function HrDashboardPage() {
             </motion.div>
           ) : (
             <motion.div key="evaluations" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {EVAL_FILTER_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  const count = opt.value === 'ALL' ? evaluationCounts.all
-                    : opt.value === 'PASS' ? evaluationCounts.pass
-                    : opt.value === 'EXTEND' ? evaluationCounts.extend
-                    : evaluationCounts.fail;
-                  return (
-                    <motion.button
-                      key={opt.value}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setEvalFilter(opt.value)}
-                      className={cn(
-                        'card p-4 text-left transition-all',
-                        evalFilter === opt.value && 'ring-2 ring-primary-400 shadow-md',
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <Icon className={cn('w-5 h-5', opt.color)} />
-                        <span className="text-2xl font-bold tabular-nums text-neutral-900">{count}</span>
+              <div className="flex gap-2 border-b border-neutral-200">
+                <button
+                  onClick={() => setEvalSubTab('pending')}
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
+                    evalSubTab === 'pending'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-neutral-500 hover:text-neutral-700',
+                  )}
+                >
+                  <Clock className="w-4 h-4" />
+                  待处理
+                  {pendingCounts.all > 0 && (
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-danger-100 text-danger-700 text-xs font-bold">
+                      {pendingCounts.all}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setEvalSubTab('archived')}
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
+                    evalSubTab === 'archived'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-neutral-500 hover:text-neutral-700',
+                  )}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  已归档
+                  {archiveCounts.all > 0 && (
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-accent-100 text-accent-700 text-xs font-bold">
+                      {archiveCounts.all}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <AnimatePresence mode="wait">
+                {evalSubTab === 'pending' ? (
+                  <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {PENDING_CATEGORY_OPTIONS.map((opt) => {
+                        const Icon = opt.icon;
+                        const count = opt.value === 'all' ? pendingCounts.all
+                          : opt.value === 'confirm' ? pendingCounts.confirm
+                          : opt.value === 'extend' ? pendingCounts.extend
+                          : pendingCounts.terminate;
+                        return (
+                          <motion.button
+                            key={opt.value}
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setPendingCategory(opt.value)}
+                            className={cn(
+                              'card p-4 text-left transition-all relative overflow-hidden',
+                              pendingCategory === opt.value && 'ring-2 ring-primary-400 shadow-md',
+                              opt.value === 'confirm' && 'bg-gradient-to-br from-accent-50/60 to-white',
+                              opt.value === 'extend' && 'bg-gradient-to-br from-warning-50/60 to-white',
+                              opt.value === 'terminate' && 'bg-gradient-to-br from-danger-50/60 to-white',
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Icon className={cn('w-5 h-5', opt.color)} />
+                              <span className="text-2xl font-bold tabular-nums text-neutral-900">{count}</span>
+                            </div>
+                            <p className="text-sm font-medium text-neutral-700">{opt.label}</p>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                      <input
+                        type="text"
+                        placeholder="搜索待处理员工姓名、部门或岗位..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="input-field pl-12"
+                      />
+                    </div>
+
+                    {pendingEvaluations.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {pendingEvaluations.map(({ process, evaluation: eval_ }) => {
+                          if (!eval_) return null;
+                          const resultConfig = getEvaluationConfig(eval_.suggestedResult);
+                          const ResultIcon = resultConfig.icon;
+                          const avgScore = Math.round((eval_.workAbility + eval_.teamCollaboration + eval_.attendance + eval_.learningAgility) / 4);
+                          const isUrgent = eval_.suggestedResult === 'FAIL';
+                          return (
+                            <motion.div
+                              key={process.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              whileHover={{ y: -3 }}
+                              className={cn(
+                                'card p-5 cursor-pointer group relative overflow-hidden',
+                                isUrgent && 'border-danger-300 bg-gradient-to-br from-danger-50/40 to-white',
+                                eval_.suggestedResult === 'EXTEND' && 'border-warning-200 bg-gradient-to-br from-warning-50/40 to-white',
+                              )}
+                              onClick={() => handleViewDetail(process.id)}
+                            >
+                              <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                                    {process.employeeName.slice(0, 1)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-neutral-900 truncate">{process.employeeName}</h4>
+                                    <p className="text-xs text-neutral-500">{process.department} · {process.position}</p>
+                                  </div>
+                                </div>
+                                <span className={cn('badge flex-shrink-0 animate-pulse', resultConfig.className)}>
+                                  <ResultIcon className="w-3 h-3" />
+                                  {resultConfig.label}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                                  <p className="text-[10px] text-neutral-400 mb-0.5">综合评分</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <Star className="w-3.5 h-3.5 text-primary-500 fill-current" />
+                                    <span className="text-sm font-bold text-primary-700 tabular-nums">{avgScore}</span>
+                                  </div>
+                                </div>
+                                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                                  <p className="text-[10px] text-neutral-400 mb-0.5">评估时间</p>
+                                  <p className="text-xs font-medium text-neutral-700">{formatDate(eval_.submittedAt)}</p>
+                                </div>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-primary-50 border border-primary-100 mb-3">
+                                <p className="text-xs font-semibold text-primary-700 flex items-center gap-1.5 mb-1">
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                  {eval_.suggestedResult === 'PASS' && '待 HR 确认转正'}
+                                  {eval_.suggestedResult === 'EXTEND' && '待 HR 设置延期试用期'}
+                                  {eval_.suggestedResult === 'FAIL' && '待 HR 记录不通过处理'}
+                                </p>
+                                <p className="text-[11px] text-primary-600/80">点击进入员工详情页进行处理</p>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-3 border-t border-neutral-100">
+                                <p className="text-xs text-neutral-400 line-clamp-1 flex-1 mr-2">{eval_.overallComment}</p>
+                                <ArrowRight className="w-4 h-4 text-neutral-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
+                              </div>
+                            </motion.div>
+                          );
+                        })}
                       </div>
-                      <p className="text-sm font-medium text-neutral-700">{opt.label}</p>
-                    </motion.button>
-                  );
-                })}
-              </div>
-
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
-                <input
-                  type="text"
-                  placeholder="搜索员工姓名、部门或岗位..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input-field pl-12"
-                />
-              </div>
-
-              {evaluationResults.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {evaluationResults.map(({ process, evaluation: eval_ }) => {
-                    if (!eval_) return null;
-                    const resultConfig = getEvaluationConfig(eval_.suggestedResult);
-                    const ResultIcon = resultConfig.icon;
-                    const avgScore = Math.round((eval_.workAbility + eval_.teamCollaboration + eval_.attendance + eval_.learningAgility) / 4);
-                    const followUpLabel: Record<string, string> = {
-                      PENDING_REVIEW: '待HR处理',
-                      CONFIRMED: '已转正',
-                      EXTEND_SET: '已设置延期',
-                      TERMINATION_RECORDED: '已记录',
-                    };
-                    return (
-                      <motion.div
-                        key={process.id}
-                        whileHover={{ y: -3 }}
-                        className="card p-5 cursor-pointer group"
-                        onClick={() => handleViewDetail(process.id)}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
-                              {process.employeeName.slice(0, 1)}
+                    ) : (
+                      <div className="card p-12 text-center">
+                        <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-accent-400" />
+                        <h3 className="text-lg font-bold text-neutral-800 mb-2">全部已处理完毕！</h3>
+                        <p className="text-sm text-neutral-500">当前分类下没有待处理的评估，干得漂亮</p>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.div key="archived" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {EVAL_ARCHIVE_OPTIONS.map((opt) => {
+                        const Icon = opt.icon;
+                        const count = opt.value === 'ALL' ? archiveCounts.all
+                          : opt.value === 'PASS' ? archiveCounts.pass
+                          : opt.value === 'EXTEND' ? archiveCounts.extend
+                          : archiveCounts.fail;
+                        return (
+                          <motion.button
+                            key={opt.value}
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setArchiveFilter(opt.value)}
+                            className={cn(
+                              'card p-4 text-left transition-all relative overflow-hidden',
+                              archiveFilter === opt.value && 'ring-2 ring-primary-400 shadow-md',
+                              opt.value === 'PASS' && 'bg-gradient-to-br from-accent-50/60 to-white',
+                              opt.value === 'EXTEND' && 'bg-gradient-to-br from-warning-50/60 to-white',
+                              opt.value === 'FAIL' && 'bg-gradient-to-br from-danger-50/60 to-white',
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Icon className={cn('w-5 h-5', opt.color)} />
+                              <span className="text-2xl font-bold tabular-nums text-neutral-900">{count}</span>
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-neutral-900 truncate">{process.employeeName}</h4>
-                              <p className="text-xs text-neutral-500">{process.department} · {process.position}</p>
-                            </div>
-                          </div>
-                          <span className={cn('badge flex-shrink-0', resultConfig.className)}>
-                            <ResultIcon className="w-3 h-3" />
-                            {resultConfig.label}
-                          </span>
-                        </div>
+                            <p className="text-sm font-medium text-neutral-700">{opt.label}</p>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                          <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
-                            <p className="text-[10px] text-neutral-400 mb-0.5">综合评分</p>
-                            <div className="flex items-center gap-1.5">
-                              <Star className="w-3.5 h-3.5 text-primary-500 fill-current" />
-                              <span className="text-sm font-bold text-primary-700 tabular-nums">{avgScore}</span>
-                            </div>
-                          </div>
-                          <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
-                            <p className="text-[10px] text-neutral-400 mb-0.5">评估时间</p>
-                            <p className="text-xs font-medium text-neutral-700">{formatDate(eval_.submittedAt)}</p>
-                          </div>
-                        </div>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                      <input
+                        type="text"
+                        placeholder="搜索归档员工姓名、部门或岗位..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="input-field pl-12"
+                      />
+                    </div>
 
-                        {eval_.followUpStatus && (
-                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-50 border border-neutral-100 mb-3">
-                            <span className="text-xs text-neutral-500">后续处理</span>
-                            <span className={cn(
-                              'text-xs font-semibold',
-                              eval_.followUpStatus === 'CONFIRMED' && 'text-accent-600',
-                              eval_.followUpStatus === 'EXTEND_SET' && 'text-warning-600',
-                              eval_.followUpStatus === 'TERMINATION_RECORDED' && 'text-danger-600',
-                              eval_.followUpStatus === 'PENDING_REVIEW' && 'text-primary-600',
-                            )}>
-                              {followUpLabel[eval_.followUpStatus] || '待处理'}
-                            </span>
-                          </div>
-                        )}
+                    {archivedEvaluations.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {archivedEvaluations.map(({ process, evaluation: eval_ }) => {
+                          if (!eval_) return null;
+                          const resultConfig = getEvaluationConfig(eval_.suggestedResult);
+                          const ResultIcon = resultConfig.icon;
+                          const avgScore = Math.round((eval_.workAbility + eval_.teamCollaboration + eval_.attendance + eval_.learningAgility) / 4);
+                          const followUpLabel: Record<string, { label: string; className: string }> = {
+                            CONFIRMED: { label: '已转正', className: 'text-accent-600 bg-accent-100' },
+                            EXTEND_SET: { label: '已设置延期', className: 'text-warning-600 bg-warning-100' },
+                            TERMINATION_RECORDED: { label: '不通过已记录', className: 'text-danger-600 bg-danger-100' },
+                          };
+                          const followUp = eval_.followUpStatus ? followUpLabel[eval_.followUpStatus] : null;
+                          return (
+                            <motion.div
+                              key={process.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              whileHover={{ y: -3 }}
+                              className="card p-5 cursor-pointer group"
+                              onClick={() => handleViewDetail(process.id)}
+                            >
+                              <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-neutral-500 to-neutral-600 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                                    {process.employeeName.slice(0, 1)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-neutral-900 truncate">{process.employeeName}</h4>
+                                    <p className="text-xs text-neutral-500">{process.department} · {process.position}</p>
+                                  </div>
+                                </div>
+                                <span className={cn('badge flex-shrink-0', resultConfig.className)}>
+                                  <ResultIcon className="w-3 h-3" />
+                                  {resultConfig.label}
+                                </span>
+                              </div>
 
-                        <div className="flex items-center justify-between pt-3 border-t border-neutral-100">
-                          <p className="text-xs text-neutral-400 line-clamp-1 flex-1 mr-2">{eval_.overallComment}</p>
-                          <ArrowRight className="w-4 h-4 text-neutral-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="card p-12 text-center">
-                  <ClipboardCheck className="w-12 h-12 mx-auto mb-3 text-neutral-300" />
-                  <h3 className="text-lg font-bold text-neutral-800 mb-2">暂无评估记录</h3>
-                  <p className="text-sm text-neutral-500">尚无员工完成转正评估，评估结果提交后将在此处显示</p>
-                </div>
-              )}
+                              <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                                  <p className="text-[10px] text-neutral-400 mb-0.5">综合评分</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <Star className="w-3.5 h-3.5 text-primary-500 fill-current" />
+                                    <span className="text-sm font-bold text-primary-700 tabular-nums">{avgScore}</span>
+                                  </div>
+                                </div>
+                                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                                  <p className="text-[10px] text-neutral-400 mb-0.5">评估时间</p>
+                                  <p className="text-xs font-medium text-neutral-700">{formatDate(eval_.submittedAt)}</p>
+                                </div>
+                              </div>
+
+                              {followUp && (
+                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-50 border border-neutral-100 mb-3">
+                                  <span className="text-xs text-neutral-500">归档状态</span>
+                                  <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', followUp.className)}>
+                                    {followUp.label}
+                                  </span>
+                                </div>
+                              )}
+
+                              {eval_.followUpStatus === 'EXTEND_SET' && eval_.followUpData?.newProbationEndDate && (
+                                <div className="p-2.5 rounded-xl bg-warning-50 border border-warning-100 mb-3">
+                                  <p className="text-[10px] text-warning-600 font-medium mb-0.5">新试用结束日</p>
+                                  <p className="text-xs font-semibold text-warning-700">
+                                    {formatDate(eval_.followUpData.newProbationEndDate)}
+                                  </p>
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between pt-3 border-t border-neutral-100">
+                                <p className="text-xs text-neutral-400 line-clamp-1 flex-1 mr-2">{eval_.overallComment}</p>
+                                <ArrowRight className="w-4 h-4 text-neutral-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="card p-12 text-center">
+                        <ClipboardCheck className="w-12 h-12 mx-auto mb-3 text-neutral-300" />
+                        <h3 className="text-lg font-bold text-neutral-800 mb-2">暂无归档记录</h3>
+                        <p className="text-sm text-neutral-500">评估处理完成后会自动归档到这里</p>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>

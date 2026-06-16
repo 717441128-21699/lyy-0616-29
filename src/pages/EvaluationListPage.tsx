@@ -11,6 +11,7 @@ import {
   Inbox,
   Trophy,
   Star,
+  Clock,
 } from 'lucide-react';
 import { RoleBasedLayout } from '@/components/layout/RoleBasedLayout';
 import EvaluationReminderCard from '@/components/manager/EvaluationReminderCard';
@@ -58,6 +59,12 @@ export default function EvaluationListPage() {
         return bt - at;
       });
   }, [allProcesses, managerId, getEvaluationForProcess]);
+
+  const extendedProbationList = useMemo(() => {
+    return completedEvaluations.filter(
+      ({ evaluation }) => evaluation?.followUpStatus === 'EXTEND_SET',
+    );
+  }, [completedEvaluations]);
 
   return (
     <RoleBasedLayout>
@@ -166,6 +173,117 @@ export default function EvaluationListPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {extendedProbationList.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="space-y-3"
+          >
+            <div className="flex items-center gap-2 pt-2">
+              <div className="w-1 h-5 rounded-full bg-gradient-to-b from-warning-500 to-orange-500" />
+              <h2 className="text-lg font-bold text-neutral-800 flex items-center gap-2">
+                延期试用期跟踪
+                <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-warning-100 text-warning-700 text-xs font-bold">
+                  {extendedProbationList.length}
+                </span>
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
+              {extendedProbationList.map(({ process, evaluation }, idx) => {
+                const daysLeft = probationDaysLeft(process);
+                const isUrgent = daysLeft <= 15 && daysLeft > 0;
+                const ResultIcon = daysLeft <= 0 ? AlertTriangle : isUrgent ? AlertTriangle : Clock;
+                const avgScore = evaluation
+                  ? Math.round((evaluation.workAbility + evaluation.teamCollaboration + evaluation.attendance + evaluation.learningAgility) / 4)
+                  : 0;
+
+                return (
+                  <motion.div
+                    key={process.id}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    whileHover={{ y: -4 }}
+                    className="card p-5 cursor-pointer relative overflow-hidden group border-warning-200 bg-gradient-to-br from-warning-50/60 via-orange-50/40 to-white"
+                    onClick={() => navigate(`/manager/evaluation/${process.id}`)}
+                  >
+                    <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-gradient-to-br from-warning-50/60 to-orange-50/40 opacity-70 group-hover:opacity-95 transition-opacity -mr-10 -mt-10" />
+                    <div className="relative z-10">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-warning-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                            {process.employeeName.slice(0, 1)}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-neutral-900 truncate">{process.employeeName}</h4>
+                            <p className="text-xs text-neutral-500 mt-0.5">{process.position}</p>
+                          </div>
+                        </div>
+                        <motion.div
+                          whileHover={{ x: 2 }}
+                          className="w-8 h-8 rounded-xl bg-white/70 group-hover:bg-warning-100 flex items-center justify-center text-neutral-400 group-hover:text-warning-600 transition-colors flex-shrink-0"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                        </motion.div>
+                      </div>
+
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/80 border border-warning-100">
+                          <span className="text-xs text-neutral-500 flex items-center gap-1">
+                            <CalendarDays className="w-3 h-3" />
+                            新试用结束日
+                          </span>
+                          <span className="text-xs font-semibold text-warning-700">
+                            {evaluation?.followUpData?.newProbationEndDate
+                              ? formatDate(evaluation.followUpData.newProbationEndDate)
+                              : formatDate(process.probationEndDate)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/80 border border-warning-100">
+                          <span className="text-xs text-neutral-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            距下一次评估
+                          </span>
+                          <span className={cn(
+                            'text-xs font-bold tabular-nums',
+                            daysLeft <= 0 && 'text-danger-600',
+                            isUrgent && daysLeft > 0 && 'text-warning-600',
+                            !isUrgent && daysLeft > 0 && 'text-primary-600',
+                          )}>
+                            {daysLeft > 0 ? `还有 ${daysLeft} 天` : '已到期'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {evaluation?.followUpData?.improvementPlan && (
+                        <div className="p-2.5 rounded-xl bg-white/80 border border-warning-100 mb-3">
+                          <p className="text-[10px] text-warning-600 font-medium mb-1">改进计划</p>
+                          <p className="text-xs text-neutral-600 line-clamp-2 leading-relaxed">
+                            {evaluation.followUpData.improvementPlan}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between p-3 rounded-2xl bg-white/80 border border-warning-100">
+                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning-50">
+                          <Star className="w-3 h-3 text-warning-600 fill-current" />
+                          <span className="text-sm font-bold text-warning-700 tabular-nums">{avgScore}</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning-100 text-warning-700 text-xs font-semibold">
+                          <ResultIcon className="w-3 h-3" />
+                          {daysLeft > 0 ? (isUrgent ? '临近再评估' : '改进跟踪中') : '待再评估'}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         <AnimatePresence>
           {completedEvaluations.length > 0 && (

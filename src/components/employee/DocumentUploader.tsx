@@ -9,10 +9,13 @@ import {
   GraduationCap,
   Image as ImageIcon,
   FolderPlus,
+  Clock,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import type { DocumentType, UploadedDocument } from '@/types';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
-import { formatFileSize, getDocumentTypeConfig } from '@/lib/dateUtils';
+import { formatFileSize, getDocumentTypeConfig, getDocumentReviewConfig, formatDate } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
 
 interface DocumentUploaderProps {
@@ -69,7 +72,12 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
   const getDocByType = useCallback(
-    (type: DocumentType) => documents.find((d) => d.type === type),
+    (type: DocumentType) => {
+      const matching = documents
+        .filter((d) => d.type === type)
+        .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+      return matching[0];
+    },
     [documents],
   );
 
@@ -118,9 +126,13 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
     fileInputsRef.current[type]?.click();
   };
 
+  const approvedCount = documents.filter((d) => d.reviewStatus === 'APPROVED' && d.type !== 'OTHER').length;
+  const rejectedCount = documents.filter((d) => d.reviewStatus === 'REJECTED').length;
+  const pendingCount = documents.filter((d) => d.reviewStatus === 'PENDING').length;
+
   return (
     <div className="bg-white rounded-2xl shadow-card p-6 md:p-8">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-warning-50 flex items-center justify-center">
             <Upload className="w-5 h-5 text-warning-600" />
@@ -128,7 +140,9 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
           <div>
             <h2 className="text-xl font-bold text-neutral-800">材料上传</h2>
             <p className="text-sm text-neutral-500">
-              已上传 {documents.filter((d) => d.type !== 'OTHER').length} / 4 项必填材料
+              已审核通过 {approvedCount} / 4 项必填材料
+              {pendingCount > 0 && <span className="text-warning-600"> · 待审核 {pendingCount}</span>}
+              {rejectedCount > 0 && <span className="text-danger-600"> · 需重新提交 {rejectedCount}</span>}
             </p>
           </div>
         </div>
@@ -138,8 +152,12 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
         {uploadZones.map((zone, index) => {
           const config = getDocumentTypeConfig(zone.type);
           const uploaded = getDocByType(zone.type);
+          const reviewCfg = uploaded ? getDocumentReviewConfig(uploaded.reviewStatus) : null;
           const isDragging = draggedType === zone.type;
           const Icon = zone.icon;
+          const isRejected = uploaded?.reviewStatus === 'REJECTED';
+          const isPending = uploaded?.reviewStatus === 'PENDING';
+          const isApproved = uploaded?.reviewStatus === 'APPROVED';
 
           return (
             <motion.div
@@ -149,11 +167,14 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
               transition={{ duration: 0.4, delay: index * 0.06 }}
               className={cn(
                 'relative rounded-xl border-2 border-dashed transition-all overflow-hidden',
-                uploaded
-                  ? 'border-accent-300 bg-accent-50/50'
-                  : isDragging
+                isRejected && 'border-danger-300 bg-danger-50/60',
+                isApproved && 'border-accent-300 bg-accent-50/50',
+                isPending && 'border-warning-300 bg-warning-50/50',
+                !uploaded && (
+                  isDragging
                     ? 'border-primary-500 bg-primary-50 scale-[1.01] shadow-glow-primary'
-                    : 'border-neutral-200 bg-neutral-50 hover:border-primary-300 hover:bg-primary-50/40',
+                    : 'border-neutral-200 bg-neutral-50 hover:border-primary-300 hover:bg-primary-50/40'
+                ),
               )}
               onDragOver={(e) => handleDragOver(e, zone.type)}
               onDragLeave={handleDragLeave}
@@ -181,7 +202,10 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
                     <div className="flex items-start gap-4">
                       <div className="relative flex-shrink-0">
                         {uploaded.previewUrl ? (
-                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden bg-neutral-100 border border-neutral-200">
+                          <div className={cn(
+                            'w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden border',
+                            isRejected ? 'border-danger-200 bg-danger-50' : isApproved ? 'border-accent-200 bg-accent-50' : 'border-warning-200 bg-warning-50',
+                          )}>
                             <img
                               src={uploaded.previewUrl}
                               alt={uploaded.fileName}
@@ -189,22 +213,30 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
                             />
                           </div>
                         ) : (
-                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-lg bg-primary-50 border border-primary-100 flex items-center justify-center">
-                            <FileText className="w-10 h-10 text-primary-400" />
+                          <div className={cn(
+                            'w-20 h-20 md:w-24 md:h-24 rounded-lg flex items-center justify-center border',
+                            isRejected ? 'bg-danger-50 border-danger-100' : isApproved ? 'bg-accent-50 border-accent-100' : 'bg-warning-50 border-warning-100',
+                          )}>
+                            <FileText className={cn('w-10 h-10', isRejected ? 'text-danger-400' : isApproved ? 'text-accent-400' : 'text-primary-400')} />
                           </div>
                         )}
-                        <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-accent-500 flex items-center justify-center shadow-sm">
-                          <CheckCircle2 className="w-4 h-4 text-white" />
+                        <div className={cn(
+                          'absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow-sm',
+                          isApproved && 'bg-accent-500',
+                          isRejected && 'bg-danger-500',
+                          isPending && 'bg-warning-500',
+                        )}>
+                          {isApproved && <CheckCircle2 className="w-4 h-4 text-white" />}
+                          {isRejected && <AlertCircle className="w-4 h-4 text-white" />}
+                          {isPending && <Clock className="w-4 h-4 text-white animate-pulse" />}
                         </div>
                       </div>
 
                       <div className="flex-1 min-w-0 pt-1">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span
-                                className={cn('text-sm font-semibold', config.className)}
-                              >
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={cn('text-sm font-semibold', config.className)}>
                                 {config.label}
                               </span>
                               {config.required && (
@@ -212,23 +244,78 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
                                   必填
                                 </span>
                               )}
+                              {reviewCfg && (
+                                <span className={cn('badge !py-0.5 !px-1.5 text-[10px]', reviewCfg.className)}>
+                                  {reviewCfg.label}
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-neutral-700 truncate font-medium">
                               {uploaded.fileName}
                             </p>
                             <p className="text-xs text-neutral-400 mt-1">
-                              {formatFileSize(uploaded.fileSize)}
+                              {formatFileSize(uploaded.fileSize)} · 上传于 {formatDate(uploaded.uploadDate)}
                             </p>
+                            {isRejected && uploaded.reviewReason && (
+                              <div className="mt-2 p-2 rounded-lg bg-danger-50 border border-danger-100">
+                                <p className="text-xs text-danger-600 font-medium flex items-center gap-1 mb-0.5">
+                                  <AlertCircle className="w-3 h-3" />
+                                  驳回原因
+                                </p>
+                                <p className="text-xs text-danger-700 leading-relaxed">
+                                  {uploaded.reviewReason}
+                                </p>
+                              </div>
+                            )}
                           </div>
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => removeDocument(uploaded.id)}
-                            className="flex-shrink-0 w-8 h-8 rounded-lg bg-neutral-100 hover:bg-danger-50 text-neutral-400 hover:text-danger-500 transition-colors flex items-center justify-center"
-                          >
-                            <X className="w-4 h-4" />
-                          </motion.button>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {isRejected && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => openFileDialog(zone.type)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-danger-500 hover:bg-danger-600 text-white text-xs font-medium transition-colors"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                重新上传
+                              </motion.button>
+                            )}
+                            {isPending && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => openFileDialog(zone.type)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-warning-500 hover:bg-warning-600 text-white text-xs font-medium transition-colors"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                更新文件
+                              </motion.button>
+                            )}
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => removeDocument(uploaded.id)}
+                              className="flex-shrink-0 w-8 h-8 rounded-lg bg-neutral-100 hover:bg-danger-50 text-neutral-400 hover:text-danger-500 transition-colors flex items-center justify-center"
+                            >
+                              <X className="w-4 h-4" />
+                            </motion.button>
+                          </div>
                         </div>
+
+                        {(isRejected || isPending) && (
+                          <div className="mt-3 pt-3 border-t border-black/5 flex items-center justify-between">
+                            <p className="text-xs text-neutral-500">
+                              {isRejected ? '点击「重新上传」提交新的文件' : '审核中，可随时更新文件'}
+                            </p>
+                            <button
+                              onClick={() => openFileDialog(zone.type)}
+                              className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                            >
+                              <Upload className="w-3 h-3" />
+                              选择文件
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -256,9 +343,7 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
 
                       <div className="flex-1 min-w-0 pt-1">
                         <div className="flex items-center gap-2 mb-1.5">
-                          <span
-                            className={cn('text-sm font-semibold', config.className)}
-                          >
+                          <span className={cn('text-sm font-semibold', config.className)}>
                             {config.label}
                           </span>
                           {config.required ? (
@@ -291,6 +376,7 @@ export function DocumentUploader({ processId }: DocumentUploaderProps) {
           <FileText className="w-4 h-4 flex-shrink-0 mt-0.5 text-neutral-400" />
           <span>
             支持的格式：JPG、PNG、PDF 等；单个文件大小不超过 10MB。为保证识别效果，请上传清晰的扫描件或照片。
+            材料审核驳回后可直接点击「重新上传」提交新文件，无需先删除旧文件。
           </span>
         </p>
       </div>
