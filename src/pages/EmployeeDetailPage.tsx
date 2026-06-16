@@ -31,7 +31,7 @@ import TaskCard from '@/components/tasks/TaskCard';
 import { SignaturePad } from '@/components/employee/SignaturePad';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useUserStore } from '@/store/useUserStore';
-import type { TaskStatus, TaskCategory, EvaluationResult } from '@/types';
+import type { TaskStatus, TaskCategory, EvaluationResult, DocumentReviewStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import {
   formatDate,
@@ -40,6 +40,7 @@ import {
   getEvaluationConfig,
   formatFileSize,
   getCategoryConfig,
+  getDocumentReviewConfig,
   probationDaysLeft,
 } from '@/lib/dateUtils';
 import { calculateTasksProgress } from '@/lib/progressCalculator';
@@ -75,12 +76,15 @@ export default function EmployeeDetailPage() {
     hrSignContract,
     removeDocument,
     getUserById,
+    reviewDocument,
   } = useOnboardingStore();
 
   const currentUser = useUserStore((s) => s.currentUser);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('tasks');
   const [hrSignature, setHrSignature] = useState<string | null>(null);
+  const [rejectModalDoc, setRejectModalDoc] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const process = useMemo(() => getOnboardingProcessById(processId), [processId, getOnboardingProcessById]);
   const tasks = useMemo(() => getTasksForProcess(processId), [processId, getTasksForProcess]);
@@ -529,15 +533,25 @@ export default function EmployeeDetailPage() {
                     {documents.length > 0 ? (
                       documents.map((doc) => {
                         const config = getDocumentTypeConfig(doc.type);
+                        const reviewCfg = getDocumentReviewConfig(doc.reviewStatus);
                         return (
                           <motion.div
                             key={doc.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="card p-4 flex flex-col"
+                            className={cn(
+                              'card p-4 flex flex-col',
+                              doc.reviewStatus === 'REJECTED' && 'border-danger-300 bg-danger-50/30',
+                            )}
                           >
                             <div className="flex items-start justify-between mb-3">
-                              <span className={cn('badge', config.className)}>{config.label}</span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn('badge', config.className)}>{config.label}</span>
+                                <span className={cn('badge !text-[10px] !px-1.5', reviewCfg.className)}>
+                                  <span className={cn('w-1.5 h-1.5 rounded-full', reviewCfg.dotColor)} />
+                                  {reviewCfg.label}
+                                </span>
+                              </div>
                               {config.required ? (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-600 font-medium">
                                   必填
@@ -572,17 +586,57 @@ export default function EmployeeDetailPage() {
                                 <span>{formatDate(doc.uploadDate)}</span>
                               </div>
                             </div>
+                            {doc.reviewStatus === 'REJECTED' && doc.reviewReason && (
+                              <div className="mb-3 p-2.5 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-700 flex items-start gap-2">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="font-semibold mb-0.5">驳回原因：</p>
+                                  <p className="leading-relaxed">{doc.reviewReason}</p>
+                                </div>
+                              </div>
+                            )}
+                            {doc.reviewedBy && doc.reviewedAt && (
+                              <div className="mb-3 text-[11px] text-neutral-400">
+                                审核人：{getUserById(doc.reviewedBy)?.name || 'HR'} · {formatDate(doc.reviewedAt)}
+                              </div>
+                            )}
                             <div className="flex gap-2 pt-3 border-t border-neutral-100">
                               <button className="btn-secondary flex-1 !py-2 !px-3 text-xs">
                                 <Eye className="w-3.5 h-3.5" />
                                 预览
                               </button>
-                              <button
-                                onClick={() => removeDocument(doc.id)}
-                                className="btn-secondary !py-2 !px-3 text-xs hover:!text-danger-600 hover:!border-danger-200"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {!doc.reviewStatus || doc.reviewStatus === 'PENDING' || doc.reviewStatus === 'REJECTED' ? (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      reviewDocument(doc.id, 'APPROVED', undefined, currentUser?.id)
+                                    }
+                                    className="btn-secondary !py-2 !px-3 text-xs !border-accent-300 !text-accent-700 hover:!bg-accent-50"
+                                    title="审核通过"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    通过
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setRejectModalDoc(doc.id);
+                                      setRejectReason(doc.reviewReason || '');
+                                    }}
+                                    className="btn-secondary !py-2 !px-3 text-xs !border-danger-300 !text-danger-700 hover:!bg-danger-50"
+                                    title="驳回并要求重新上传"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    驳回
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => removeDocument(doc.id)}
+                                  className="btn-secondary !py-2 !px-3 text-xs hover:!text-danger-600 hover:!border-danger-200"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </motion.div>
                         );
@@ -594,6 +648,67 @@ export default function EmployeeDetailPage() {
                       </div>
                     )}
                   </div>
+
+                  <AnimatePresence>
+                    {rejectModalDoc && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+                        onClick={() => setRejectModalDoc(null)}
+                      >
+                        <motion.div
+                          initial={{ scale: 0.9, y: 20 }}
+                          animate={{ scale: 1, y: 0 }}
+                          exit={{ scale: 0.9, y: 20 }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="card p-6 w-full max-w-md space-y-4"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center">
+                              <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-lg text-neutral-900">驳回材料</h3>
+                              <p className="text-sm text-neutral-500">请填写驳回原因，员工将收到通知并可重新上传</p>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">
+                              驳回原因 <span className="text-danger-500">*</span>
+                            </label>
+                            <textarea
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="例如：身份证照片不清晰，请重新上传清晰彩色扫描件"
+                              rows={4}
+                              className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                            />
+                          </div>
+                          <div className="flex gap-3 justify-end pt-2">
+                            <button
+                              onClick={() => setRejectModalDoc(null)}
+                              className="btn-secondary"
+                            >
+                              取消
+                            </button>
+                            <button
+                              disabled={!rejectReason.trim()}
+                              onClick={() => {
+                                reviewDocument(rejectModalDoc, 'REJECTED', rejectReason.trim(), currentUser?.id);
+                                setRejectModalDoc(null);
+                                setRejectReason('');
+                              }}
+                              className="btn-primary !bg-danger-600 hover:!bg-danger-700"
+                            >
+                              确认驳回
+                            </button>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               )}
 

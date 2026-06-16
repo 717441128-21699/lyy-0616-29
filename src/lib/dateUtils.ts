@@ -8,6 +8,7 @@ import type {
   TaskStatus,
   TaskCategory,
   DocumentType,
+  DocumentReviewStatus,
   EvaluationResult,
 } from '@/types';
 
@@ -139,5 +140,16 @@ export const getEvaluationConfig = (result: EvaluationResult): { label: string; 
 };
 
 export const cnStatusBadge = (className: string) => cn('badge', className);
+
+export const getDocumentReviewConfig = (
+  status: DocumentReviewStatus | undefined,
+): { label: string; className: string; dotColor: string } => {
+  const map: Record<DocumentReviewStatus, { label: string; className: string; dotColor: string }> = {
+    PENDING: { label: '待审核', className: 'bg-warning-50 text-warning-700', dotColor: 'bg-warning-500' },
+    APPROVED: { label: '已通过', className: 'bg-accent-50 text-accent-700', dotColor: 'bg-accent-500' },
+    REJECTED: { label: '已驳回', className: 'bg-danger-50 text-danger-700', dotColor: 'bg-danger-500' },
+  };
+  return map[status || 'PENDING'];
+};
 
 export { addDays };

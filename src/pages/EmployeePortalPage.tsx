@@ -18,6 +18,7 @@ import {
   Monitor,
   FileText,
   Sparkles,
+  ClipboardCheck,
 } from 'lucide-react';
 import { WelcomeBanner } from '@/components/employee/WelcomeBanner';
 import { ProgressTimeline } from '@/components/employee/ProgressTimeline';
@@ -37,6 +38,7 @@ export default function EmployeePortalPage() {
     getAcknowledgementsForProcess,
     getDocumentsForProcess,
     getContractForProcess,
+    getEvaluationForProcess,
     getUserById,
   } = useOnboardingStore();
 
@@ -53,6 +55,7 @@ export default function EmployeePortalPage() {
   const acks = useMemo(() => getAcknowledgementsForProcess(processId), [processId, getAcknowledgementsForProcess]);
   const docs = useMemo(() => getDocumentsForProcess(processId), [processId, getDocumentsForProcess]);
   const contract = useMemo(() => getContractForProcess(processId), [processId, getContractForProcess]);
+  const evaluation = useMemo(() => getEvaluationForProcess(processId), [processId, getEvaluationForProcess]);
 
   const manager = process ? getUserById(process.managerId) : undefined;
   const itOwner = process ? getUserById(process.itOwnerId) : undefined;
@@ -85,6 +88,26 @@ export default function EmployeePortalPage() {
     if (contract.employeeSignature) return { status: 'done', label: '已签署', color: 'text-primary-600', bg: 'bg-primary-50 border-primary-200' };
     return { status: 'progress', label: '待签署', color: 'text-warning-600', bg: 'bg-warning-50 border-warning-200' };
   }, [contract]);
+
+  const evaluationStatus = useMemo(() => {
+    if (!process) return { status: 'pending', label: '未开始', color: 'text-neutral-500', bg: 'bg-neutral-50 border-neutral-200' };
+    if (evaluation) {
+      const labelConfig: Record<string, string> = { PASS: '已通过', EXTEND: '延长试用', FAIL: '未通过' };
+      const colorConfig: Record<string, string> = {
+        PASS: 'text-accent-600 bg-accent-50 border-accent-200',
+        EXTEND: 'text-warning-600 bg-warning-50 border-warning-200',
+        FAIL: 'text-danger-600 bg-danger-50 border-danger-200',
+      };
+      return {
+        status: 'done',
+        label: labelConfig[evaluation.suggestedResult] || '已评估',
+        color: colorConfig[evaluation.suggestedResult] || 'text-primary-600 bg-primary-50 border-primary-200',
+      };
+    }
+    if (process.status === 'PROBATION') return { status: 'pending', label: '试用中', color: 'text-primary-600', bg: 'bg-primary-50 border-primary-200' };
+    if (process.status === 'EVALUATION_PENDING') return { status: 'progress', label: '待评估', color: 'text-warning-600', bg: 'bg-warning-50 border-warning-200' };
+    return { status: 'pending', label: '未开始', color: 'text-neutral-500', bg: 'bg-neutral-50 border-neutral-200' };
+  }, [process, evaluation]);
 
   const quickActions = [
     {
@@ -126,6 +149,28 @@ export default function EmployeePortalPage() {
       path: `/employee/${processId}/contract`,
       gradient: 'from-accent-500 to-teal-500',
       iconBg: 'bg-accent-100 text-accent-600',
+    },
+    {
+      key: 'evaluation',
+      icon: evaluation?.suggestedResult === 'FAIL' ? AlertCircle : ClipboardCheck,
+      title: '转正评估',
+      desc: evaluation ? '查看您的试用期评估结果' : process?.status === 'PROBATION' ? '试用期进行中，评估待提交' : '提交评估后可在此查看',
+      status: evaluationStatus,
+      path: `/employee/${processId}/evaluation`,
+      gradient: evaluation?.suggestedResult === 'FAIL'
+        ? 'from-danger-500 to-rose-500'
+        : evaluation?.suggestedResult === 'EXTEND'
+          ? 'from-warning-500 to-orange-500'
+          : evaluation
+            ? 'from-accent-500 to-teal-500'
+            : 'from-violet-500 to-indigo-500',
+      iconBg: evaluation?.suggestedResult === 'FAIL'
+        ? 'bg-danger-100 text-danger-600'
+        : evaluation?.suggestedResult === 'EXTEND'
+          ? 'bg-warning-100 text-warning-600'
+          : evaluation
+            ? 'bg-accent-100 text-accent-600'
+            : 'bg-violet-100 text-violet-600',
     },
     {
       key: 'progress',

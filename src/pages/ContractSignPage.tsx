@@ -20,6 +20,39 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useUserStore } from '@/store/useUserStore';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/dateUtils';
+import { generateContractContent } from '@/lib/contractGenerator';
+import type { OnboardingProcess, EmployeePersonalInfo } from '@/types';
+
+const generateContractContentFallback = (
+  process?: OnboardingProcess,
+  personalInfo?: EmployeePersonalInfo,
+): string => {
+  if (process && personalInfo) {
+    return generateContractContent(process, personalInfo);
+  }
+  if (process) {
+    return generateContractContent(process, {
+      processId: process.id,
+      fullName: process.employeeName,
+      gender: 'MALE',
+      idNumber: '__________________',
+      birthDate: '',
+      phone: '',
+      address: '',
+      bankAccount: '',
+      bankName: '',
+      education: [],
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      isCompleted: false,
+    });
+  }
+  return `
+    【说明】完整合同内容将在个人信息填写完成并经HR审核后自动生成。
+    本合同依据《中华人民共和国劳动合同法》及相关法律法规制定，
+    包含工作地点、劳动报酬、工作时间、休息休假、社会保险、
+    保密义务、竞业限制、合同解除、争议解决等完整条款。
+  `.trim();
+};
 
 type ContractStep = 0 | 1 | 2 | 3;
 
@@ -43,6 +76,7 @@ export default function ContractSignPage() {
     getContractForProcess,
     getOnboardingProcessById,
     employeeSignContract,
+    getPersonalInfo,
   } = useOnboardingStore();
 
   const processId = id || currentProcessId || '';
@@ -55,6 +89,7 @@ export default function ContractSignPage() {
 
   const contract = useMemo(() => getContractForProcess(processId), [processId, getContractForProcess]);
   const process = useMemo(() => getOnboardingProcessById(processId), [processId, getOnboardingProcessById]);
+  const personalInfoFromStore = useMemo(() => getPersonalInfo(processId), [processId, getPersonalInfo]);
 
   const [signatureData, setSignatureData] = useState<string | null>(contract?.employeeSignature || null);
   const [agreed, setAgreed] = useState(false);
@@ -244,107 +279,18 @@ export default function ContractSignPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 text-sm md:text-base leading-7 text-neutral-700 font-serif">
-                    <p className="indent-8">
-                      根据《中华人民共和国劳动法》、《中华人民共和国劳动合同法》及相关法律法规的规定，
-                      <strong className="text-neutral-900"> 甲方（用人单位）星辰科技有限公司 </strong>
-                      与
-                      <strong className="text-neutral-900"> 乙方（劳动者）{process?.employeeName} </strong>
-                      本着平等自愿、协商一致、诚实信用的原则，签订本劳动合同，共同遵守本合同所列条款。
+                  <div className="space-y-2 text-sm md:text-[15px] leading-8 text-neutral-700 font-serif whitespace-pre-wrap">
+                    {contract.content || generateContractContentFallback(process, personalInfoFromStore)}
+                  </div>
+
+                  <div className="mt-6 p-4 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-500 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <p>
+                      <strong className="text-neutral-600">提示：</strong>
+                      以上为完整劳动合同正文，共十一条。请您逐页仔细阅读并完整理解所有条款内容，
+                      包括工作岗位、劳动报酬、休息休假、保密义务、合同解除等全部约定。
+                      如有疑问请咨询 HR。签署即表示您已阅读并同意全部条款。
                     </p>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第一条 工作岗位与工作地点</h3>
-                      <p className="indent-8">
-                        1.1 甲方安排乙方在 <u className="font-semibold">{process?.department}</u> 部门，
-                        从事 <u className="font-semibold">{process?.position}</u> 工作。
-                      </p>
-                      <p className="indent-8">
-                        1.2 工作地点为：上海市浦东新区张江高科技园区。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第二条 合同期限</h3>
-                      <p className="indent-8">
-                        2.1 本合同为固定期限劳动合同，自 <u>{formatDate(process?.startDate)}</u> 起，
-                        至 <u>{process?.startDate ? formatDate(new Date(new Date(process.startDate).getTime() + 365 * 24 * 60 * 60 * 1000 * 3)) : '—'}</u> 止，共计 <strong>叁年</strong>。
-                      </p>
-                      <p className="indent-8">
-                        2.2 试用期自 <u>{formatDate(process?.startDate)}</u> 起，
-                        至 <u>{formatDate(process?.probationEndDate)}</u> 止，共计 <strong>叁个月</strong>。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第三条 工作时间与休息休假</h3>
-                      <p className="indent-8">
-                        3.1 实行标准工时制，每日工作不超过8小时，每周工作不超过40小时。
-                      </p>
-                      <p className="indent-8">
-                        3.2 乙方依法享有国家规定的法定节假日、年休假、婚假、产假等休假权利。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第四条 劳动报酬</h3>
-                      <p className="indent-8">
-                        4.1 乙方月基本工资（税前）为人民币{' '}
-                        <strong className="text-lg text-primary-700 font-mono">
-                          ¥{process?.salary?.toLocaleString() || '—'}
-                        </strong>{' '}
-                        元整。
-                      </p>
-                      <p className="indent-8">
-                        4.2 甲方于每月10日前以银行转账方式支付上月工资。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第五条 社会保险与福利待遇</h3>
-                      <p className="indent-8">
-                        5.1 甲方按国家和上海市规定为乙方缴纳五险一金。
-                      </p>
-                      <p className="indent-8">
-                        5.2 乙方享有补充商业保险、年度体检、节日福利等公司福利待遇。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第六条 保密与竞业限制</h3>
-                      <p className="indent-8">
-                        6.1 乙方对工作中知悉的甲方商业秘密、技术秘密等信息负有保密义务。
-                      </p>
-                      <p className="indent-8">
-                        6.2 乙方离职后两年内不得在与甲方有竞争关系的单位任职。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第七条 合同的解除与终止</h3>
-                      <p className="indent-8">
-                        本合同的解除、终止按照国家法律法规及甲方规章制度执行。
-                      </p>
-                    </section>
-
-                    <section className="pt-2">
-                      <h3 className="font-bold text-neutral-900 mb-2 text-base">第八条 其他约定</h3>
-                      <p className="indent-8">
-                        8.1 本合同一式两份，甲乙双方各执一份，具有同等法律效力。
-                      </p>
-                      <p className="indent-8">
-                        8.2 本合同未尽事宜，按国家法律法规执行。
-                      </p>
-                    </section>
-
-                    <div className="mt-6 p-4 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-500 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                      <p>
-                        <strong className="text-neutral-600">提示：</strong>
-                        以上为劳动合同主要条款摘要，正式签署版本包含全部完整条款。
-                        签署前请务必阅读并理解完整合同内容。如有疑问请咨询HR。
-                      </p>
-                    </div>
                   </div>
 
                   {(contract.employeeSignature || contract.hrSignature) && (

@@ -9,6 +9,7 @@ import type {
   EmployeePersonalInfo,
   PolicyAcknowledgement,
   UploadedDocument,
+  DocumentReviewStatus,
   EmploymentContract,
   ProbationEvaluation,
   TaskCategory,
@@ -86,6 +87,7 @@ interface OnboardingState {
 
   uploadDocument: (processId: string, doc: Omit<UploadedDocument, 'id' | 'processId' | 'uploadDate'>) => void;
   removeDocument: (docId: string) => void;
+  reviewDocument: (docId: string, status: DocumentReviewStatus, reason?: string, reviewerId?: string) => void;
 
   updateTaskStatus: (taskId: string, status: TaskStatus, notesOrAssigneeId?: string | undefined, notes?: string) => void;
 
@@ -259,14 +261,22 @@ export const useOnboardingStore = create<OnboardingState>()(
         const requiredPolicies = 4;
         const allPoliciesAcked = processAcks.length >= requiredPolicies;
         const docs = state.documents.filter((d) => d.processId === processId);
-        const requiredDocs = 4;
-        const allDocsUploaded = docs.length >= requiredDocs;
+        const requiredDocTypes: Array<'ID_CARD_FRONT' | 'ID_CARD_BACK' | 'DIPLOMA' | 'PHOTO'> = [
+          'ID_CARD_FRONT',
+          'ID_CARD_BACK',
+          'DIPLOMA',
+          'PHOTO',
+        ];
+        const allDocsUploaded = requiredDocTypes.every((type) => docs.some((d) => d.type === type));
+        const allDocsApproved = requiredDocTypes.every((type) =>
+          docs.some((d) => d.type === type && d.reviewStatus === 'APPROVED'),
+        );
         const contract = state.contracts.find((c) => c.processId === processId);
         const evaluation = state.evaluations.find((e) => e.processId === processId);
         const contractSigned = contract?.status === 'FULLY_SIGNED';
         const evaluationSubmitted = !!evaluation;
 
-        if (!contract && personalInfo?.isCompleted && allDocsUploaded) {
+        if (!contract && personalInfo?.isCompleted && allDocsApproved) {
           get().generateContract(processId);
           return;
         }
@@ -276,7 +286,7 @@ export const useOnboardingStore = create<OnboardingState>()(
           tasks,
           personalInfo,
           allPoliciesAcked,
-          allDocsUploaded,
+          allDocsApproved,
           !!contractSigned,
           evaluationSubmitted,
         );
@@ -386,7 +396,7 @@ export const useOnboardingStore = create<OnboardingState>()(
         set((state) => ({
           documents: [
             ...state.documents,
-            { ...doc, id, processId, uploadDate: iso(new Date()) },
+            { ...doc, id, processId, uploadDate: iso(new Date()), reviewStatus: 'PENDING' },
           ],
         }));
         setTimeout(() => get().recalculateProgress(processId), 100);
@@ -398,6 +408,47 @@ export const useOnboardingStore = create<OnboardingState>()(
           documents: state.documents.filter((d) => d.id !== docId),
         }));
         if (doc) setTimeout(() => get().recalculateProgress(doc.processId), 100);
+      },
+
+      reviewDocument: (docId, status, reason, reviewerId) => {
+        const doc = get().documents.find((d) => d.id === docId);
+        if (!doc) return;
+        set((state) => ({
+          documents: state.documents.map((d) =>
+            d.id === docId
+              ? {
+                  ...d,
+                  reviewStatus: status,
+                  reviewReason: reason,
+                  reviewedBy: reviewerId,
+                  reviewedAt: iso(new Date()),
+                }
+              : d,
+          ),
+        }));
+        if (status === 'APPROVED') {
+          get().addNotification({
+            userId: doc.processId.startsWith('proc-')
+              ? get().processes.find((p) => p.id === doc.processId)?.employeeId || ''
+              : '',
+            type: 'CONTRACT_READY',
+            title: '材料审核通过',
+            message: '您提交的材料已通过审核。',
+            relatedProcessId: doc.processId,
+          });
+        } else if (status === 'REJECTED') {
+          const empId = get().processes.find((p) => p.id === doc.processId)?.employeeId || '';
+          if (empId) {
+            get().addNotification({
+              userId: empId,
+              type: 'CONTRACT_READY',
+              title: '材料需要重新提交',
+              message: `您提交的材料审核未通过：${reason || '请重新上传清晰完整的材料'}`,
+              relatedProcessId: doc.processId,
+            });
+          }
+        }
+        setTimeout(() => get().recalculateProgress(doc.processId), 100);
       },
 
       updateTaskStatus: (taskId, status, notesOrAssigneeId, notes) => {

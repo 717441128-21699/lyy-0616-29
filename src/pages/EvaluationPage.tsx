@@ -47,6 +47,9 @@ export default function EvaluationPage() {
   ) : 1;
   const passedDays = process ? totalDays - daysLeft : 0;
   const progressPercent = process ? Math.min(Math.max(Math.round((passedDays / totalDays) * 100), 0), 100) : 0;
+  const isEmployeeView = currentUser?.role === 'EMPLOYEE' || managerId === process.employeeId;
+  const isManagerView = currentUser?.role === 'MANAGER';
+  const canEditEvaluation = !submitted && !isEmployeeView && isManagerView;
 
   const resultConfig = evaluation
     ? getEvaluationConfig(evaluation.suggestedResult)
@@ -418,6 +421,30 @@ export default function EvaluationPage() {
                   </p>
                 </div>
               </motion.div>
+            </motion.div>
+          ) : isEmployeeView ? (
+            <motion.div
+              key="waiting"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="card p-8 md:p-12 text-center"
+            >
+              <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary-50 to-indigo-50 flex items-center justify-center">
+                <ClipboardCheck className="w-10 h-10 text-primary-500" />
+              </div>
+              <h3 className="text-xl font-bold text-neutral-800 mb-2">等待经理提交评估</h3>
+              <p className="text-sm text-neutral-500 max-w-md mx-auto mb-6">
+                您的直属经理将在试用期结束前完成转正评估。请持续关注工作表现，
+                如有疑问可随时联系您的经理或 HR。
+              </p>
+              <Link
+                to={`/employee/${processId}/portal`}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回员工首页
+              </Link>
             </motion.div>
           ) : (
             <motion.div

@@ -72,6 +72,7 @@ export default function App() {
         <Route path="/employee/:id/policies" element={<PoliciesPage />} />
         <Route path="/employee/:id/documents" element={<DocumentsPage />} />
         <Route path="/employee/:id/contract" element={<ContractSignPage />} />
+        <Route path="/employee/:id/evaluation" element={<EvaluationPage />} />
         <Route path="/tasks" element={<TasksWorkspacePage />} />
         <Route path="/manager/evaluations" element={<EvaluationListPage />} />
         <Route path="/manager/evaluation/:id" element={<EvaluationPage />} />

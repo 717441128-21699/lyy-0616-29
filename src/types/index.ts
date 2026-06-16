@@ -104,6 +104,8 @@ export interface PolicyAcknowledgement {
 
 export type DocumentType = 'ID_CARD_FRONT' | 'ID_CARD_BACK' | 'DIPLOMA' | 'PHOTO' | 'OTHER';
 
+export type DocumentReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
 export interface UploadedDocument {
   id: string;
   processId: string;
@@ -112,6 +114,10 @@ export interface UploadedDocument {
   uploadDate: string;
   fileSize: number;
   previewUrl?: string;
+  reviewStatus?: DocumentReviewStatus;
+  reviewReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 export interface EmploymentContract {

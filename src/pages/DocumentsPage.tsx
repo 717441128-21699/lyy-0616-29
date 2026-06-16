@@ -12,6 +12,8 @@ import {
   UserCheck,
   GraduationCap,
   Image as ImageIcon,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 import { RoleBasedLayout } from '@/components/layout/RoleBasedLayout';
 import { DocumentUploader } from '@/components/employee/DocumentUploader';
@@ -19,6 +21,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useUserStore } from '@/store/useUserStore';
 import { cn } from '@/lib/utils';
 import type { DocumentType } from '@/types';
+import { getDocumentReviewConfig, formatDate } from '@/lib/dateUtils';
 
 interface RequiredDoc {
   type: DocumentType;
@@ -50,17 +53,38 @@ export default function DocumentsPage() {
 
   const documents = useMemo(() => getDocumentsForProcess(processId), [processId, getDocumentsForProcess]);
 
+  const getLatestDocForType = (type: DocumentType) => {
+    const matching = documents
+      .filter((d) => d.type === type)
+      .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+    return matching[0];
+  };
+
   const uploadStatus = useMemo(() => {
-    return REQUIRED_DOCS.map((doc) => ({
-      ...doc,
-      uploaded: documents.some((d) => d.type === doc.type),
-    }));
+    return REQUIRED_DOCS.map((doc) => {
+      const latest = getLatestDocForType(doc.type);
+      return {
+        ...doc,
+        uploaded: !!latest,
+        reviewStatus: latest?.reviewStatus,
+        reviewReason: latest?.reviewReason,
+        latestDoc: latest,
+      };
+    });
   }, [documents]);
 
   const requiredCount = REQUIRED_DOCS.length;
-  const completedCount = uploadStatus.filter((d) => d.uploaded).length;
+  const completedCount = uploadStatus.filter((d) => d.reviewStatus === 'APPROVED').length;
   const allDone = completedCount >= requiredCount;
   const progressPercent = Math.round((completedCount / requiredCount) * 100);
+  const hasRejected = uploadStatus.some((d) => d.reviewStatus === 'REJECTED');
+
+  const getStatusIcon = (status?: string) => {
+    if (status === 'APPROVED') return <CheckCircle2 className="w-5 h-5" />;
+    if (status === 'REJECTED') return <XCircle className="w-5 h-5" />;
+    if (status === 'PENDING') return <Clock className="w-5 h-5 animate-pulse" />;
+    return null;
+  };
 
   return (
     <RoleBasedLayout>
@@ -74,14 +98,20 @@ export default function DocumentsPage() {
             返回
           </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h1 className="text-xl md:text-2xl font-bold text-neutral-900 truncate">
                 材料上传
               </h1>
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning-50 text-warning-600 text-xs font-medium">
                 <Upload className="w-3.5 h-3.5" />
-                已完成 {completedCount}/{requiredCount}
+                已审核通过 {completedCount}/{requiredCount}
               </span>
+              {hasRejected && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-danger-50 text-danger-600 text-xs font-medium">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  有材料需要重新提交
+                </span>
+              )}
             </div>
             <p className="text-sm text-neutral-500">
               请按要求上传以下入职材料，支持JPG、PNG、PDF格式
@@ -99,8 +129,11 @@ export default function DocumentsPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-neutral-800 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-warning-500" />
-                    必填材料完成进度
+                    <span className={cn(
+                      'w-2 h-2 rounded-full',
+                      allDone ? 'bg-accent-500' : hasRejected ? 'bg-danger-500' : 'bg-warning-500',
+                    )} />
+                    {allDone ? '材料已全部审核通过' : hasRejected ? '有材料被驳回，请重新上传' : '材料审核进度'}
                   </h3>
                 </div>
                 <div className="text-right">
@@ -109,7 +142,9 @@ export default function DocumentsPage() {
                       'text-2xl md:text-3xl font-bold tabular-nums',
                       allDone
                         ? 'bg-gradient-to-r from-accent-500 to-teal-500 bg-clip-text text-transparent'
-                        : 'text-warning-600',
+                        : hasRejected
+                          ? 'text-danger-600'
+                          : 'text-warning-600',
                     )}
                   >
                     {progressPercent}%
@@ -125,10 +160,18 @@ export default function DocumentsPage() {
                     'h-full rounded-full',
                     allDone
                       ? 'bg-gradient-to-r from-accent-400 to-teal-500'
-                      : 'bg-gradient-to-r from-warning-400 to-orange-500',
+                      : hasRejected
+                        ? 'bg-gradient-to-r from-danger-400 to-rose-500'
+                        : 'bg-gradient-to-r from-warning-400 to-orange-500',
                   )}
                 />
               </div>
+              {hasRejected && (
+                <p className="mt-3 text-xs text-danger-600 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  部分材料未通过审核，请查看下方驳回原因并重新上传
+                </p>
+              )}
             </div>
 
             <div className="hidden md:block w-px h-16 bg-neutral-100" />
@@ -136,31 +179,26 @@ export default function DocumentsPage() {
             <div className="flex gap-3 flex-wrap">
               {uploadStatus.map((doc) => {
                 const Icon = doc.icon;
+                const reviewCfg = getDocumentReviewConfig(doc.reviewStatus);
                 return (
                   <div
                     key={doc.type}
                     className="flex flex-col items-center"
-                    title={`${doc.label}${doc.uploaded ? '：已上传' : '：未上传'}`}
+                    title={`${doc.label}${doc.uploaded ? `：${reviewCfg.label}` : '：未上传'}`}
                   >
                     <div
                       className={cn(
-                        'w-11 h-11 rounded-2xl flex items-center justify-center mb-1.5 transition-all',
-                        doc.uploaded
+                        'w-11 h-11 rounded-2xl flex items-center justify-center mb-1.5 transition-all relative',
+                        doc.reviewStatus === 'APPROVED'
                           ? `bg-gradient-to-br ${doc.color} text-white shadow-md`
-                          : 'bg-neutral-100 text-neutral-400',
+                          : doc.reviewStatus === 'REJECTED'
+                            ? 'bg-gradient-to-br from-danger-400 to-rose-500 text-white shadow-md'
+                            : doc.reviewStatus === 'PENDING'
+                              ? 'bg-gradient-to-br from-warning-400 to-orange-500 text-white shadow-md'
+                              : 'bg-neutral-100 text-neutral-400',
                       )}
                     >
-                      {doc.uploaded ? (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 300 }}
-                        >
-                          <CheckCircle2 className="w-6 h-6" />
-                        </motion.div>
-                      ) : (
-                        <Icon className="w-5 h-5" />
-                      )}
+                      {getStatusIcon(doc.reviewStatus) || <Icon className="w-5 h-5" />}
                     </div>
                     <span className="text-[10px] md:text-xs text-neutral-500 whitespace-nowrap">
                       {doc.label.slice(0, 4)}
@@ -171,6 +209,52 @@ export default function DocumentsPage() {
             </div>
           </div>
         </motion.div>
+
+        {hasRejected && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="p-5 rounded-2xl bg-gradient-to-br from-danger-50/80 via-rose-50/50 to-warning-50/50 border border-danger-200/60"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-danger-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-neutral-800 mb-2 flex items-center gap-2">
+                  请重新提交以下材料
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-100 text-danger-700 text-[10px] font-medium">
+                    需要处理
+                  </span>
+                </h3>
+                <div className="space-y-2">
+                  {uploadStatus
+                    .filter((d) => d.reviewStatus === 'REJECTED')
+                    .map((d) => (
+                      <div
+                        key={d.type}
+                        className="p-3 rounded-xl bg-white/70 border border-danger-100 text-sm"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-neutral-800">{d.label}</span>
+                          {d.latestDoc && (
+                            <span className="text-[11px] text-neutral-400">
+                              上传于 {formatDate(d.latestDoc.uploadDate)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-danger-700 text-xs leading-relaxed">
+                          <strong>驳回原因：</strong>
+                          {d.reviewReason || '材料不符合要求，请重新上传'}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -214,6 +298,12 @@ export default function DocumentsPage() {
                     单个文件不超过 <strong>10MB</strong>，支持格式：<strong>JPG、PNG、PDF</strong>
                   </span>
                 </li>
+                <li className="flex items-start gap-2 text-warning-600">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>注意：</strong>所有材料上传后需经 HR 审核，审核通过后方可进入合同签署环节。
+                  </span>
+                </li>
               </ul>
             </div>
           </div>
@@ -249,10 +339,10 @@ export default function DocumentsPage() {
                     </motion.div>
                     <div className="text-left">
                       <h3 className="text-xl font-bold text-neutral-900 mb-0.5">
-                        材料上传完成！
+                        材料审核全部通过！
                       </h3>
                       <p className="text-sm text-neutral-500">
-                        所有必填材料已提交，接下来进入合同签署环节
+                        所有必填材料已审核通过，接下来进入合同签署环节
                       </p>
                     </div>
                   </div>
@@ -280,3 +370,4 @@ export default function DocumentsPage() {
     </RoleBasedLayout>
   );
 }
+

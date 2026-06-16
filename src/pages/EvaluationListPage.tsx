@@ -36,7 +36,7 @@ export default function EvaluationListPage() {
         const ev = getEvaluationForProcess(p.id);
         if (ev) return false;
         const daysLeft = probationDaysLeft(p);
-        return daysLeft <= 30 && p.status !== 'COMPLETED';
+        return daysLeft <= 15 && p.status !== 'COMPLETED' && daysLeft > 0;
       })
       .sort((a: OnboardingProcess, b: OnboardingProcess) => probationDaysLeft(a) - probationDaysLeft(b));
   }, [allProcesses, managerId, getEvaluationForProcess]);
